@@ -26,7 +26,13 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  Lock,
+  Unlock,
+  KeyRound,
+  Download,
+  FileJson,
+  ShieldCheck
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -61,9 +67,13 @@ import {
   getChartData,
   exportOrdersToExcelCSV,
   subscribeRealtime,
-  createOrder
+  createOrder,
+  initSupabaseRealtimeSync,
+  syncAllWithSupabase,
+  exportFullDatabaseBackup,
+  importFullDatabaseBackup
 } from '../lib/database';
-import { getSupabaseConfig, saveSupabaseConfig, SUPABASE_SQL_SCHEMA, getSupabaseClient } from '../lib/supabase';
+import { getSupabaseConfig, saveSupabaseConfig, SUPABASE_SQL_SCHEMA, getSupabaseClient, testSupabaseConnection, isValidSupabaseUrl } from '../lib/supabase';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -71,7 +81,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'credit' | 'menu' | 'reports' | 'supabase'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'credit' | 'menu' | 'reports' | 'database_settings'>('orders');
 
   // Data states
   const [orders, setOrders] = useState<Order[]>([]);
@@ -112,6 +122,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [sbKey, setSbKey] = useState('');
   const [sbSavedMsg, setSbSavedMsg] = useState('');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [isTestingSb, setIsTestingSb] = useState(false);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [sbStatus, setSbStatus] = useState<{ success: boolean; message: string; tablesFound?: boolean } | null>(null);
+
+  // Database Settings Separate Password Protection (PIN: 4415)
+  const [isDbUnlocked, setIsDbUnlocked] = useState(false);
+  const [dbPinInput, setDbPinInput] = useState('');
+  const [dbPinError, setDbPinError] = useState('');
+
+  // Database Import/Export Backup states
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResultMsg, setImportResultMsg] = useState<{ success: boolean; text: string } | null>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
 
   // Refresh all data
   const refreshData = () => {
@@ -126,10 +150,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     if (isOpen) {
       refreshData();
 
-      // Load Supabase config
+      // Load Supabase config & check connection status
       const conf = getSupabaseConfig();
       setSbUrl(conf.url);
       setSbKey(conf.key);
+
+      if (conf.url && conf.key && isValidSupabaseUrl(conf.url)) {
+        testSupabaseConnection(conf.url, conf.key).then((res) => {
+          setSbStatus(res);
+          if (res.success) {
+            initSupabaseRealtimeSync();
+            syncAllWithSupabase().then(() => refreshData());
+          }
+        });
+      } else {
+        setSbStatus(null);
+      }
 
       // Subscribe to real-time events
       const unsubscribe = subscribeRealtime((event) => {
@@ -276,74 +312,222 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Supabase Save
-  const handleSaveSupabase = (e: React.FormEvent) => {
+  // Supabase Save & Test
+  const handleSaveSupabase = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sbUrl.trim() || !sbKey.trim()) {
+      setSbSavedMsg('لطفاً هم Project URL و هم Anon Key را وارد نمایید.');
+      return;
+    }
+
+    setIsTestingSb(true);
+    setSbSavedMsg('در حال برقراری ارتباط با سرورهای سوپابیس...');
     saveSupabaseConfig(sbUrl, sbKey);
-    setSbSavedMsg('اطلاعات سوپابیس با موفقیت ذخیره شد.');
-    setTimeout(() => setSbSavedMsg(''), 3500);
+
+    const testRes = await testSupabaseConnection(sbUrl, sbKey);
+    setSbStatus(testRes);
+    setIsTestingSb(false);
+
+    if (testRes.success) {
+      setSbSavedMsg(testRes.message);
+      await initSupabaseRealtimeSync();
+      await syncAllWithSupabase();
+      refreshData();
+    } else {
+      setSbSavedMsg(testRes.message);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncingNow(true);
+    await syncAllWithSupabase();
+    refreshData();
+    setTimeout(() => setIsSyncingNow(false), 600);
+  };
+
+  // Database Settings Separate PIN (4415) Verification
+  const handleVerifyDbPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (dbPinInput.trim() === '4415') {
+      setIsDbUnlocked(true);
+      setDbPinError('');
+      setDbPinInput('');
+    } else {
+      setDbPinError('رمز عبور وارد شده اشتباه است. دسترسی به تنظیمات دیتابیس مجاز نیست.');
+      setDbPinInput('');
+    }
+  };
+
+  // Export Full Database Backup (JSON)
+  const handleExportBackup = () => {
+    setIsExporting(true);
+    try {
+      exportFullDatabaseBackup();
+      setImportResultMsg({ success: true, text: 'فایل پشتیبان کامل دیتابیس (JSON) با موفقیت دانلود شد.' });
+    } catch (err: any) {
+      setImportResultMsg({ success: false, text: `خطا در دریافت فایل پشتیبان: ${err?.message || err}` });
+    } finally {
+      setTimeout(() => setIsExporting(false), 600);
+    }
+  };
+
+  // Import Full Database Backup (JSON)
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportResultMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const res = await importFullDatabaseBackup(text, importMode);
+        setImportResultMsg({ success: res.success, text: res.message });
+        if (res.success) {
+          refreshData();
+        }
+      } catch (err: any) {
+        setImportResultMsg({ success: false, text: `خطا در خواندن فایل: ${err?.message || err}` });
+      } finally {
+        setIsImporting(false);
+        e.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setImportResultMsg({ success: false, text: 'خطا در بارگذاری فایل از سیستم.' });
+      setIsImporting(false);
+    };
+    reader.readAsText(file);
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex bg-black/85 backdrop-blur-md">
       <div className="w-full h-full flex flex-col bg-[#14100E] text-[#FDFBF7]">
         {/* Admin Header */}
-        <div className="h-16 px-4 sm:px-6 bg-[#1A1513] border-b border-[#C87D55]/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl copper-gradient flex items-center justify-center text-white font-black">
+        <div className="h-14 sm:h-16 px-3 sm:px-6 bg-[#1A1513] border-b border-[#C87D55]/30 flex items-center justify-between gap-2 shrink-0">
+          {/* Brand & Panel Title */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl copper-gradient flex items-center justify-center text-white font-black text-sm sm:text-base shrink-0 shadow-md">
               R
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-[#FDFBF7] flex items-center gap-2">
-                <span>پنل اختصاصی مدیریت کافه رابیا</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#C87D55]/20 text-[#E0946B] border border-[#C87D55]/30">
-                  REAL-TIME ADMIN
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-black text-[#FDFBF7] flex items-center gap-1.5 sm:gap-2 truncate">
+                <span className="sm:hidden">پنل مدیریت</span>
+                <span className="hidden sm:inline">پنل اختصاصی مدیریت کافه رابیا</span>
+                <span className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-[#C87D55]/20 text-[#E0946B] border border-[#C87D55]/30 shrink-0">
+                  REAL-TIME
                 </span>
               </h2>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Supabase Status Indicator in Header */}
+            {sbStatus?.success ? (
+              <button
+                onClick={() => setActiveTab('database_settings')}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-700/60 text-emerald-300 text-[11px] sm:text-xs font-bold hover:bg-emerald-950 transition-all shrink-0"
+                title="اتصال با دیتابیس برقرار است و سفارشات آنلاین به صورت زنده هماهنگ هستند"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <span className="hidden sm:inline">دیتابیس:</span>
+                <span>آنلاین</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setActiveTab('database_settings')}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-amber-950/40 border border-amber-700/40 text-amber-300 text-[11px] sm:text-xs font-bold hover:bg-amber-950/70 transition-all shrink-0"
+                title="تنظیمات دیتابیس"
+              >
+                <Database className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">تنظیمات دیتابیس</span>
+                <span className="sm:hidden">دیتابیس</span>
+              </button>
+            )}
+
+            {/* Manual Sync Button */}
             <button
-              onClick={refreshData}
-              title="به‌روزرسانی داده‌ها"
-              className="p-2 rounded-xl bg-[#241E1B] text-[#A8988C] hover:text-white transition-colors"
+              onClick={handleManualSync}
+              disabled={isSyncingNow}
+              title="همگام‌سازی فوری داده‌ها با سرور"
+              className="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl bg-[#241E1B] hover:bg-[#2F2723] border border-[#C87D55]/30 text-[#E5D7CD] hover:text-white text-xs font-medium transition-all disabled:opacity-50 shrink-0"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#E0946B] ${isSyncingNow ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">سینک داده‌ها</span>
             </button>
+
+            {/* Exit button */}
             <button
               onClick={onClose}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 text-rose-300 text-xs font-semibold transition-all"
+              title="خروج از پنل مدیریت"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 text-rose-300 text-xs font-semibold transition-all shrink-0"
             >
-              <LogOut className="w-4 h-4" />
-              <span>خروج از پنل</span>
+              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">خروج از پنل</span>
+              <span className="sm:hidden">خروج</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 px-4 sm:px-6 bg-[#181311] border-b border-[#C87D55]/20 overflow-x-auto scrollbar-none py-2">
+        {/* Navigation Tabs (Smooth Responsive Horizontal Scroll) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-6 bg-[#181311] border-b border-[#C87D55]/20 overflow-x-auto scrollbar-none py-2 shrink-0">
           {[
-            { id: 'orders', label: 'سفارش‌های آنلاین', icon: <ShoppingBag className="w-4 h-4" />, badge: orders.filter(o => o.status === 'pending').length },
-            { id: 'users', label: 'تایید و لیست مشتریان', icon: <Users className="w-4 h-4" />, badge: pendingUsers.length },
-            { id: 'credit', label: 'شارژ اعتبار و سفارش حضوری', icon: <Wallet className="w-4 h-4" /> },
-            { id: 'menu', label: 'مدیریت آیتم‌های منو', icon: <Coffee className="w-4 h-4" /> },
-            { id: 'reports', label: 'گزارش‌ها و خروجی اکسل', icon: <BarChart3 className="w-4 h-4" /> },
-            { id: 'supabase', label: 'تنظیمات سوپابیس (Supabase)', icon: <Database className="w-4 h-4" /> },
+            { 
+              id: 'orders', 
+              label: 'سفارش‌های آنلاین', 
+              mobileLabel: 'سفارش‌ها',
+              icon: <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />, 
+              badge: orders.filter(o => o.status === 'pending').length 
+            },
+            { 
+              id: 'users', 
+              label: 'تایید و لیست مشتریان', 
+              mobileLabel: 'مشتریان',
+              icon: <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />, 
+              badge: pendingUsers.length 
+            },
+            { 
+              id: 'credit', 
+              label: 'شارژ اعتبار و سفارش حضوری', 
+              mobileLabel: 'شارژ اعتبار',
+              icon: <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+            },
+            { 
+              id: 'menu', 
+              label: 'مدیریت آیتم‌های منو', 
+              mobileLabel: 'منوی کافه',
+              icon: <Coffee className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+            },
+            { 
+              id: 'reports', 
+              label: 'گزارش‌ها و خروجی اکسل', 
+              mobileLabel: 'گزارش‌ها',
+              icon: <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+            },
+            { 
+              id: 'database_settings', 
+              label: 'تنظیمات دیتابیس', 
+              mobileLabel: 'دیتابیس',
+              icon: isDbUnlocked ? <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" /> : <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C87D55]" /> 
+            },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                   isActive
                     ? 'copper-gradient text-white shadow-md'
                     : 'text-[#A8988C] hover:text-white hover:bg-[#241E1B]'
                 }`}
               >
                 {tab.icon}
-                <span>{tab.label}</span>
+                <span className="sm:hidden">{tab.mobileLabel}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
                 {Boolean(tab.badge && tab.badge > 0) && (
                   <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
                     {tab.badge}
@@ -360,21 +544,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           {activeTab === 'orders' && (
             <div className="space-y-4 max-w-7xl mx-auto">
               {/* Order Status Filters */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 overflow-x-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
                   {[
                     { id: 'all', label: 'همه سفارش‌ها' },
-                    { id: 'pending', label: 'در انتظار تایید باریستا' },
+                    { id: 'pending', label: 'در انتظار باریستا' },
                     { id: 'preparing', label: 'در حال آماده‌سازی' },
-                    { id: 'ready', label: 'آماده تحویل / سرو' },
-                    { id: 'delivered', label: 'تحویل داده شده' },
+                    { id: 'ready', label: 'آماده تحویل' },
+                    { id: 'delivered', label: 'تحویل شده' },
                   ].map((f) => (
                     <button
                       key={f.id}
                       onClick={() => setOrderFilter(f.id as any)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                         orderFilter === f.id
-                          ? 'bg-[#C87D55] text-white'
+                          ? 'bg-[#C87D55] text-white shadow-md'
                           : 'bg-[#201A17] text-[#A8988C] hover:text-white'
                       }`}
                     >
@@ -383,7 +567,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   ))}
                 </div>
 
-                <div className="text-xs text-[#A8988C]">
+                <div className="text-[11px] sm:text-xs text-[#A8988C]">
                   نمایش {filteredOrders.length} سفارش لحظه‌ای
                 </div>
               </div>
@@ -1191,62 +1375,348 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* TAB 6: SUPABASE INTEGRATION & SQL SCHEMA */}
-          {activeTab === 'supabase' && (
-            <div className="space-y-5 max-w-4xl mx-auto">
-              <div className="p-5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30 space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl copper-gradient flex items-center justify-center text-white font-bold">
-                    <Database className="w-5 h-5" />
+          {/* TAB 6: DATABASE SETTINGS, SECURITY (PIN: 4415), IMPORT/EXPORT & SUPABASE */}
+          {activeTab === 'database_settings' && !isDbUnlocked && (
+            <div className="max-w-md mx-auto my-12 p-6 sm:p-8 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30 shadow-2xl text-center space-y-6">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-[#2A201A] border border-[#C87D55]/40 flex items-center justify-center text-[#E0946B] shadow-inner">
+                <Lock className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-lg font-black text-[#FDFBF7]">بخش محرمانه تنظیمات دیتابیس</h3>
+                <p className="text-xs text-[#A8988C] leading-relaxed">
+                  این بخش شامل تنظیمات فنی اتصال به سرور، همگام‌سازی ابری و خروجی / ورودی جامع دیتابیس است و نیاز به رمز عبور اختصاصی ارشد دارد.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyDbPin} className="space-y-4">
+                <div className="space-y-2 text-right">
+                  <label className="text-xs font-bold text-[#D8C7B8] flex items-center justify-between">
+                    <span>رمز عبور بخش دیتابیس:</span>
+                    <span className="text-[10px] text-[#A8988C]">رمز اختصاصی ۴ رقمی</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      maxLength={8}
+                      autoFocus
+                      value={dbPinInput}
+                      onChange={(e) => {
+                        setDbPinInput(e.target.value);
+                        setDbPinError('');
+                      }}
+                      placeholder="رمز عبور را وارد کنید"
+                      className="w-full bg-[#120E0C] border border-[#C87D55]/40 rounded-xl px-4 py-3 text-center text-xl font-mono tracking-widest text-[#FDFBF7] focus:outline-none focus:border-[#C87D55] placeholder:text-[#5A4D45]"
+                    />
+                    <KeyRound className="w-4 h-4 text-[#C87D55] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
-                  <div>
-                    <h3 className="text-base font-black text-[#FDFBF7]">اتصال به دیتابیس سوپابیس (Supabase)</h3>
-                    <p className="text-xs text-[#A8988C]">
-                      اطلاعات پروژه سوپابیس خود را اینجا وارد کنید تا داده‌های کافه رابیا مستقیماً با دیتابیس ابری سینک شوند.
+                  {dbPinError && (
+                    <p className="text-xs text-rose-400 font-semibold flex items-center gap-1 mt-1.5 justify-center">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{dbPinError}</span>
                     </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 px-6 rounded-xl copper-gradient text-white font-black text-sm shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>تایید و ورود به تنظیمات دیتابیس</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {activeTab === 'database_settings' && isDbUnlocked && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              {/* Top Security Status Bar with Re-lock */}
+              <div className="p-3 px-4 rounded-xl bg-[#241C18] border border-[#C87D55]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>دسترسی امنیتی به بخش دیتابیس باز است</span>
+                  <span className="text-[10px] text-[#A8988C] mr-2">(رمز عبور تایید شده)</span>
+                </div>
+                <button
+                  onClick={() => setIsDbUnlocked(false)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#181311] hover:bg-[#2A201A] border border-[#C87D55]/30 text-xs font-semibold text-[#D8C7B8] hover:text-white transition-all self-start sm:self-auto"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#C87D55]" />
+                  <span>قفل کردن مجدد این بخش</span>
+                </button>
+              </div>
+
+              {/* Live Connection Status Banner */}
+              <div className={`p-5 rounded-2xl border transition-all ${
+                sbStatus?.success && sbStatus.tablesFound
+                  ? 'bg-emerald-950/40 border-emerald-700/60'
+                  : sbStatus?.success && !sbStatus.tablesFound
+                  ? 'bg-amber-950/40 border-amber-700/60'
+                  : sbStatus && !sbStatus.success
+                  ? 'bg-rose-950/40 border-rose-700/60'
+                  : 'bg-[#1C1613] border-[#C87D55]/30'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold ${
+                      sbStatus?.success && sbStatus.tablesFound
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : sbStatus?.success && !sbStatus.tablesFound
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : sbStatus && !sbStatus.success
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : 'copper-gradient text-white'
+                    }`}>
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black text-[#FDFBF7]">
+                          وضعیت اتصال به دیتابیس ابری
+                        </h3>
+                        {sbStatus?.success && sbStatus.tablesFound && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
+                            🟢 متصل و فعال
+                          </span>
+                        )}
+                        {sbStatus?.success && !sbStatus.tablesFound && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                            🟡 نیازمند ساخت جداول SQL
+                          </span>
+                        )}
+                        {sbStatus && !sbStatus.success && (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold">
+                            🔴 خطای اتصال
+                          </span>
+                        )}
+                        {!sbStatus && (
+                          <span className="px-2 py-0.5 rounded-full bg-[#2A201A] border border-[#C87D55]/30 text-[#E0946B] text-[10px] font-bold">
+                            ⚪ در انتظار تنظیم اطلاعات
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#D8C7B8] mt-1">
+                        {sbStatus ? sbStatus.message : 'با اتصال به دیتابیس ابری، سفارشات ثبت‌شده در گوشی به صورت آنی در این پنل روی سیستم نمایش داده می‌شوند.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {sbStatus?.success && (
+                    <button
+                      onClick={handleManualSync}
+                      disabled={isSyncingNow}
+                      className="px-4 py-2 rounded-xl copper-gradient text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all self-start sm:self-auto"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin' : ''}`} />
+                      <span>همگام‌سازی فوری دیتابیس</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* DATABASE BACKUP & DATA PORTABILITY (IMPORT / EXPORT) */}
+              <div className="p-5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#C87D55]/20 pb-3">
+                  <div>
+                    <h4 className="text-sm font-black text-[#FDFBF7] flex items-center gap-2">
+                      <FileJson className="w-4 h-4 text-[#E0946B]" />
+                      <span>پشتیبان‌گیری و جابه‌جایی دیتابیس (خروجی و درون‌ریزی)</span>
+                    </h4>
+                    <p className="text-[11px] text-[#A8988C] mt-0.5">
+                      در صورتی که قصد تغییر دیتابیس یا سرور را دارید، می‌توانید از کل اطلاعات خروجی بگیرید یا فایل پشتیبان را بازنشانی نمایید.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-[#D8C7B8] bg-[#14100E] px-3 py-1.5 rounded-xl border border-[#C87D55]/20 shrink-0">
+                    <span>داده‌های فعلی:</span>
+                    <span className="text-[#E0946B] font-bold">{orders.length} سفارش</span>
+                    <span>•</span>
+                    <span className="text-[#E0946B] font-bold">{users.length} کاربر</span>
+                    <span>•</span>
+                    <span className="text-[#E0946B] font-bold">{menuItems.length} آیتم منو</span>
                   </div>
                 </div>
 
+                {importResultMsg && (
+                  <div className={`p-3.5 rounded-xl text-xs font-semibold border flex items-center gap-2 ${
+                    importResultMsg.success
+                      ? 'bg-emerald-950/70 border-emerald-700 text-emerald-300'
+                      : 'bg-rose-950/70 border-rose-700 text-rose-300'
+                  }`}>
+                    {importResultMsg.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    )}
+                    <span>{importResultMsg.text}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Export Section */}
+                  <div className="p-4 rounded-xl bg-[#181311] border border-[#C87D55]/20 flex flex-col justify-between space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-[#E0946B] font-bold text-xs">
+                        <Download className="w-4 h-4" />
+                        <span>خروجی کامل دیتابیس (Export Backup)</span>
+                      </div>
+                      <p className="text-[11px] text-[#A8988C] leading-relaxed">
+                        دانلود فایل استاندارد JSON شامل تمام سفارشات، کاربران و موجودی اعتبار، منوی محصولات و سوابق مالی برای انتقال یا بایگانی.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleExportBackup}
+                      disabled={isExporting}
+                      className="w-full py-2.5 px-4 rounded-xl copper-gradient text-white font-bold text-xs shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isExporting ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>در حال آماده‌سازی فایل پشتیبان...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          <span>دانلود فایل پشتیبان کامل (JSON)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Import Section */}
+                  <div className="p-4 rounded-xl bg-[#181311] border border-[#C87D55]/20 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-[#E0946B] font-bold text-xs">
+                        <Upload className="w-4 h-4" />
+                        <span>درون‌ریزی و بازیابی دیتابیس (Import Backup)</span>
+                      </div>
+                      <p className="text-[11px] text-[#A8988C] leading-relaxed">
+                        بارگذاری فایل JSON جهت بازگردانی اطلاعات یا انتقال به دیتابیس جدید:
+                      </p>
+
+                      <div className="flex items-center gap-3 pt-1 text-[11px]">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[#D8C7B8]">
+                          <input
+                            type="radio"
+                            name="importMode"
+                            checked={importMode === 'merge'}
+                            onChange={() => setImportMode('merge')}
+                            className="text-[#C87D55] focus:ring-0"
+                          />
+                          <span>ادغام با داده‌های فعلی (Merge)</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[#D8C7B8]">
+                          <input
+                            type="radio"
+                            name="importMode"
+                            checked={importMode === 'replace'}
+                            onChange={() => setImportMode('replace')}
+                            className="text-[#C87D55] focus:ring-0"
+                          />
+                          <span>جایگزینی کامل (Replace)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <label className="w-full py-2.5 px-4 rounded-xl bg-[#2A201A] hover:bg-[#382C25] border border-[#C87D55]/40 text-[#E0946B] hover:text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+                        {isImporting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>در حال پردازش و ثبت داده‌ها...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4" />
+                            <span>انتخاب فایل پشتیبان (.json)</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept=".json,application/json"
+                          onChange={handleFileImport}
+                          disabled={isImporting}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supabase Connection Form */}
+              <div className="p-5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black text-[#FDFBF7] flex items-center gap-2">
+                    <Database className="w-4 h-4 text-[#E0946B]" />
+                    <span>مشخصات اتصال پروژه دیتابیس (Supabase)</span>
+                  </h4>
+                  <span className="text-[11px] text-[#A8988C]">اتصال مستقیم کلاینت ابری به جداول سفارشات و مشتریان</span>
+                </div>
+
                 {sbSavedMsg && (
-                  <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs">
+                  <div className={`p-3 rounded-xl text-xs border ${
+                    sbStatus?.success
+                      ? 'bg-emerald-950/70 border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950/70 border-rose-800 text-rose-300'
+                  }`}>
                     {sbSavedMsg}
                   </div>
                 )}
 
-                <form onSubmit={handleSaveSupabase} className="space-y-3.5 text-xs">
+                <form onSubmit={handleSaveSupabase} className="space-y-4 text-xs">
                   <div>
-                    <label className="text-[#D8C7B8] font-semibold block mb-1">
-                      Project URL (آدرس پروژه در سوپابیس):
+                    <label className="text-[#D8C7B8] font-semibold block mb-1.5">
+                      Project URL (آدرس اختصاصی پروژه در سوپابیس):
                     </label>
                     <input
                       type="url"
                       dir="ltr"
                       value={sbUrl}
                       onChange={(e) => setSbUrl(e.target.value)}
-                      placeholder="https://xyzcompany.supabase.co"
-                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-2.5 text-[#FDFBF7] focus:outline-none"
+                      placeholder="https://xyzabcdefghijklmn.supabase.co"
+                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-3 text-[#FDFBF7] focus:outline-none focus:border-[#C87D55]"
                     />
+                    <span className="text-[10px] text-[#8C7B71] mt-1 block">
+                      نمونه: https://abcdefghijklmn.supabase.co
+                    </span>
                   </div>
 
                   <div>
-                    <label className="text-[#D8C7B8] font-semibold block mb-1">
-                      Anon Key (کلید پابلیک یا Anon):
+                    <label className="text-[#D8C7B8] font-semibold block mb-1.5">
+                      Anon Public API Key (کلید ناشناس/عمومی API):
                     </label>
                     <input
                       type="password"
                       dir="ltr"
                       value={sbKey}
                       onChange={(e) => setSbKey(e.target.value)}
-                      placeholder="eyJh..."
-                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-2.5 text-[#FDFBF7] focus:outline-none"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-3 text-[#FDFBF7] focus:outline-none focus:border-[#C87D55] font-mono text-[11px]"
                     />
+                    <span className="text-[10px] text-[#8C7B71] mt-1 block">
+                      کلید anon public key در منوی Project Settings &gt; API سوپابیس
+                    </span>
                   </div>
 
                   <button
                     type="submit"
-                    className="py-2.5 px-6 rounded-xl copper-gradient text-white font-bold text-xs shadow-md transition-all"
+                    disabled={isTestingSb}
+                    className="py-3 px-6 rounded-xl copper-gradient text-white font-bold text-xs shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    ذخیره و تست اتصال به سوپابیس
+                    {isTestingSb ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>در حال بررسی و اعتبارسنجی اتصال به دیتابیس...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>ذخیره و تست اتصال به دیتابیس</span>
+                      </>
+                    )}
                   </button>
                 </form>
               </div>
@@ -1255,7 +1725,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               <div className="p-5 rounded-2xl bg-[#181311] border border-[#C87D55]/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-bold text-[#FDFBF7]">کدهای SQL آماده برای اجرای جدول‌ها در سوپابیس</h4>
+                    <h4 className="text-sm font-bold text-[#FDFBF7]">کدهای SQL آماده برای ساخت جدول‌ها در دیتابیس</h4>
                     <span className="text-[11px] text-[#A8988C]">
                       این کدها را کپی کرده و در بخش SQL Editor داشبورد سوپابیس Run کنید:
                     </span>
@@ -1267,14 +1737,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       setCopiedSql(true);
                       setTimeout(() => setCopiedSql(false), 3000);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-[#2A221E] hover:bg-[#382D28] text-[#E0946B] text-xs font-bold border border-[#C87D55]/30 flex items-center gap-1.5 transition-all"
+                    className="px-3.5 py-2 rounded-lg bg-[#2A221E] hover:bg-[#382D28] text-[#E0946B] text-xs font-bold border border-[#C87D55]/30 flex items-center gap-1.5 transition-all shadow-sm"
                   >
-                    {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedSql ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     <span>{copiedSql ? 'کپی شد!' : 'کپی تمام کدهای SQL'}</span>
                   </button>
                 </div>
 
-                <pre className="p-3 rounded-xl bg-[#0F0D0C] border border-[#2B231E] text-[11px] text-[#A8988C] overflow-x-auto max-h-56 font-mono dir-ltr text-left">
+                <pre className="p-4 rounded-xl bg-[#0F0D0C] border border-[#2B231E] text-[11px] text-[#A8988C] overflow-x-auto max-h-64 font-mono dir-ltr text-left leading-relaxed">
                   {SUPABASE_SQL_SCHEMA}
                 </pre>
               </div>

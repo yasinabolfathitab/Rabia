@@ -18,65 +18,24 @@ try {
   console.warn('BroadcastChannel not supported', e);
 }
 
-// Initial demo users to test out of the box
-const INITIAL_USERS: User[] = [
-  {
-    id: 'user-approved-1',
-    name: 'علی رضایی',
-    phone: '09120001122',
-    password: '123456',
-    address: 'تهران، خیابان ولیعصر، فرشته، خیابان مریم، برج رز، طبقه ۴',
-    rabiaCredit: 350000,
-    status: 'approved',
-    createdAt: new Date(Date.now() - 3600 * 1000 * 48).toISOString(),
-  },
-  {
-    id: 'user-pending-1',
-    name: 'سارا محمدی',
-    phone: '09121112233',
-    password: '123456',
-    address: 'تهران، سعادت آباد، میدان کاج، پلاک ۱۸',
-    rabiaCredit: 0,
-    status: 'pending',
-    createdAt: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
-  }
-];
+// Initial users and orders are cleared to empty arrays for production deployment
+const INITIAL_USERS: User[] = [];
+const INITIAL_ORDERS: Order[] = [];
 
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ord-101',
-    orderNumber: '#RAB-1001',
-    userId: 'user-approved-1',
-    userName: 'علی رضایی',
-    userPhone: '09120001122',
-    orderType: 'takeaway',
-    address: 'تهران، خیابان ولیعصر، فرشته، خیابان مریم، برج رز، طبقه ۴',
-    items: [
-      { itemId: 'item-1', name: 'اسپرسو دبل رابیا', price: 68000, quantity: 2 },
-      { itemId: 'item-9', name: 'چیزکیک سن‌سباستین با سس بلژیکی', price: 155000, quantity: 1 }
-    ],
-    totalAmount: 291000,
-    paymentMethod: 'rabia_credit',
-    status: 'delivered',
-    createdAt: new Date(Date.now() - 3600 * 1000 * 5).toISOString(),
-  },
-  {
-    id: 'ord-102',
-    orderNumber: '#RAB-1002',
-    userName: 'مهمان سالن (امیرحسین)',
-    userPhone: '09355556677',
-    orderType: 'dine_in',
-    tableNumber: 'میز ۷',
-    items: [
-      { itemId: 'item-5', name: 'آیس لاته پسته زعفرانی', price: 145000, quantity: 1 },
-      { itemId: 'item-10', name: 'تیرامیسو اصل ایتالیایی', price: 140000, quantity: 1 }
-    ],
-    totalAmount: 285000,
-    paymentMethod: 'counter_pos',
-    status: 'preparing',
-    createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+// Clean state for production deployment - wipe any test/demo data from previous dev sessions
+const DEPLOY_INIT_RESET_KEY = 'rabia_deploy_clean_v3';
+if (typeof window !== 'undefined') {
+  try {
+    if (!localStorage.getItem(DEPLOY_INIT_RESET_KEY)) {
+      localStorage.setItem(USERS_KEY, JSON.stringify([]));
+      localStorage.setItem(ORDERS_KEY, JSON.stringify([]));
+      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([]));
+      localStorage.setItem(DEPLOY_INIT_RESET_KEY, 'true');
+    }
+  } catch (e) {
+    console.warn('Init deploy clean error:', e);
   }
-];
+}
 
 // Helper to notify listeners
 export function emitRealtimeEvent(type: string, payload?: any) {
@@ -112,6 +71,231 @@ export function subscribeRealtime(callback: (event: { type: string; payload?: an
   };
 }
 
+// ---------------- SUPABASE REALTIME & SYNC ----------------
+let isRealtimeSubscribed = false;
+
+export async function initSupabaseRealtimeSync() {
+  const supabase = getSupabaseClient();
+  if (!supabase || isRealtimeSubscribed) return;
+
+  isRealtimeSubscribed = true;
+
+  try {
+    // Initial fetch to sync remote data into local state
+    await syncAllWithSupabase();
+
+    // 1. Subscribe to Orders changes across all devices/computers
+    supabase
+      .channel('rabia_orders_realtime_ch')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload: any) => {
+          const orders = getOrders();
+          if (payload.eventType === 'INSERT') {
+            const raw = payload.new;
+            const newOrd: Order = {
+              id: raw.id,
+              orderNumber: raw.order_number,
+              userId: raw.user_id || undefined,
+              userName: raw.user_name,
+              userPhone: raw.user_phone,
+              orderType: raw.order_type,
+              address: raw.address || undefined,
+              tableNumber: raw.table_number || undefined,
+              items: typeof raw.items === 'string' ? JSON.parse(raw.items) : raw.items,
+              totalAmount: Number(raw.total_amount),
+              paymentMethod: raw.payment_method,
+              status: raw.status,
+              createdAt: raw.created_at,
+              notes: raw.notes || undefined,
+            };
+            if (!orders.some((o) => o.id === newOrd.id)) {
+              orders.unshift(newOrd);
+              localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+              emitRealtimeEvent('order_created', newOrd);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const raw = payload.new;
+            const idx = orders.findIndex((o) => o.id === raw.id);
+            if (idx >= 0) {
+              orders[idx].status = raw.status;
+              orders[idx].totalAmount = Number(raw.total_amount);
+              localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+              emitRealtimeEvent('order_status_updated', orders[idx]);
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const updated = orders.filter((o) => o.id !== payload.old.id);
+            localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
+            emitRealtimeEvent('order_status_updated', { id: payload.old.id, deleted: true });
+          }
+        }
+      )
+      .subscribe();
+
+    // 2. Subscribe to Users changes (registrations, approvals, credits)
+    supabase
+      .channel('rabia_users_realtime_ch')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users' },
+        (payload: any) => {
+          const users = getUsers();
+          if (payload.eventType === 'INSERT') {
+            const raw = payload.new;
+            const newU: User = {
+              id: raw.id,
+              name: raw.name,
+              phone: raw.phone,
+              password: raw.password,
+              address: raw.address || '',
+              rabiaCredit: Number(raw.rabia_credit || 0),
+              status: raw.status || 'pending',
+              createdAt: raw.created_at,
+            };
+            if (!users.some((u) => u.id === newU.id)) {
+              users.unshift(newU);
+              localStorage.setItem(USERS_KEY, JSON.stringify(users));
+              emitRealtimeEvent('user_registered', newU);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const raw = payload.new;
+            const idx = users.findIndex((u) => u.id === raw.id);
+            if (idx >= 0) {
+              users[idx].status = raw.status;
+              users[idx].rabiaCredit = Number(raw.rabia_credit || 0);
+              users[idx].name = raw.name;
+              users[idx].address = raw.address || '';
+              localStorage.setItem(USERS_KEY, JSON.stringify(users));
+              emitRealtimeEvent('user_status_changed', users[idx]);
+              emitRealtimeEvent('credit_updated', { userId: raw.id, newCredit: users[idx].rabiaCredit });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Subscribe to Menu changes
+    supabase
+      .channel('rabia_menu_realtime_ch')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_items' },
+        (payload: any) => {
+          const items = getMenuItems();
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const raw = payload.new;
+            const item: MenuItem = {
+              id: raw.id,
+              name: raw.name,
+              nameEn: raw.name_en || '',
+              category: raw.category,
+              price: Number(raw.price),
+              description: raw.description || '',
+              ingredients: raw.ingredients || [],
+              image: raw.image || '',
+              isAvailable: raw.is_available,
+              isFeatured: raw.is_featured,
+            };
+            const idx = items.findIndex((i) => i.id === item.id);
+            if (idx >= 0) items[idx] = item;
+            else items.unshift(item);
+            localStorage.setItem(MENU_KEY, JSON.stringify(items));
+            emitRealtimeEvent('menu_updated', item);
+          } else if (payload.eventType === 'DELETE') {
+            const updated = items.filter((i) => i.id !== payload.old.id);
+            localStorage.setItem(MENU_KEY, JSON.stringify(updated));
+            emitRealtimeEvent('menu_updated', { id: payload.old.id, deleted: true });
+          }
+        }
+      )
+      .subscribe();
+
+  } catch (err) {
+    console.warn('Error setting up Supabase realtime sync:', err);
+  }
+}
+
+export async function syncAllWithSupabase() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    // 1. Orders
+    const { data: dbOrders, error: ordErr } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!ordErr && dbOrders && dbOrders.length > 0) {
+      const mappedOrders: Order[] = dbOrders.map((raw: any) => ({
+        id: raw.id,
+        orderNumber: raw.order_number,
+        userId: raw.user_id || undefined,
+        userName: raw.user_name,
+        userPhone: raw.user_phone,
+        orderType: raw.order_type,
+        address: raw.address || undefined,
+        tableNumber: raw.table_number || undefined,
+        items: typeof raw.items === 'string' ? JSON.parse(raw.items) : raw.items,
+        totalAmount: Number(raw.total_amount),
+        paymentMethod: raw.payment_method,
+        status: raw.status,
+        createdAt: raw.created_at,
+        notes: raw.notes || undefined,
+      }));
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(mappedOrders));
+      emitRealtimeEvent('order_status_updated');
+    }
+
+    // 2. Users
+    const { data: dbUsers, error: uErr } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!uErr && dbUsers && dbUsers.length > 0) {
+      const mappedUsers: User[] = dbUsers.map((raw: any) => ({
+        id: raw.id,
+        name: raw.name,
+        phone: raw.phone,
+        password: raw.password,
+        address: raw.address || '',
+        rabiaCredit: Number(raw.rabia_credit || 0),
+        status: raw.status,
+        createdAt: raw.created_at,
+      }));
+      localStorage.setItem(USERS_KEY, JSON.stringify(mappedUsers));
+      emitRealtimeEvent('user_updated');
+    }
+
+    // 3. Menu items
+    const { data: dbMenu, error: mErr } = await supabase
+      .from('menu_items')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (!mErr && dbMenu && dbMenu.length > 0) {
+      const mappedMenu: MenuItem[] = dbMenu.map((raw: any) => ({
+        id: raw.id,
+        name: raw.name,
+        nameEn: raw.name_en || '',
+        category: raw.category,
+        price: Number(raw.price),
+        description: raw.description || '',
+        ingredients: raw.ingredients || [],
+        image: raw.image || '',
+        isAvailable: raw.is_available,
+        isFeatured: raw.is_featured,
+      }));
+      localStorage.setItem(MENU_KEY, JSON.stringify(mappedMenu));
+      emitRealtimeEvent('menu_updated');
+    }
+  } catch (e) {
+    console.warn('Sync with Supabase failed:', e);
+  }
+}
+
 // ---------------- MENU ITEMS ----------------
 export function getMenuItems(): MenuItem[] {
   try {
@@ -134,6 +318,28 @@ export function saveMenuItem(item: MenuItem): MenuItem {
   }
   localStorage.setItem(MENU_KEY, JSON.stringify(items));
   emitRealtimeEvent('menu_updated', item);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('menu_items')
+      .upsert({
+        id: item.id,
+        name: item.name,
+        name_en: item.nameEn || null,
+        category: item.category,
+        price: item.price,
+        description: item.description,
+        ingredients: item.ingredients || [],
+        image: item.image || null,
+        is_available: item.isAvailable,
+        is_featured: item.isFeatured || false,
+      })
+      .then(({ error }) => {
+        if (error) console.error('Supabase menu upsert error:', error);
+      });
+  }
+
   return item;
 }
 
@@ -144,6 +350,18 @@ export function toggleMenuItemStock(itemId: string): boolean {
     item.isAvailable = !item.isAvailable;
     localStorage.setItem(MENU_KEY, JSON.stringify(items));
     emitRealtimeEvent('menu_updated', item);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase
+        .from('menu_items')
+        .update({ is_available: item.isAvailable })
+        .eq('id', itemId)
+        .then(({ error }) => {
+          if (error) console.error('Supabase toggle stock error:', error);
+        });
+    }
+
     return item.isAvailable;
   }
   return false;
@@ -153,6 +371,17 @@ export function deleteMenuItem(itemId: string) {
   const items = getMenuItems().filter((i) => i.id !== itemId);
   localStorage.setItem(MENU_KEY, JSON.stringify(items));
   emitRealtimeEvent('menu_updated', { id: itemId, deleted: true });
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', itemId)
+      .then(({ error }) => {
+        if (error) console.error('Supabase delete item error:', error);
+      });
+  }
 }
 
 // ---------------- USERS ----------------
@@ -189,6 +418,25 @@ export function registerUser(user: Omit<User, 'id' | 'rabiaCredit' | 'status' | 
   users.unshift(newUser);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   emitRealtimeEvent('user_registered', newUser);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('users')
+      .insert({
+        id: newUser.id,
+        name: newUser.name,
+        phone: newUser.phone,
+        password: newUser.password,
+        address: newUser.address,
+        rabia_credit: newUser.rabiaCredit,
+        status: newUser.status,
+        created_at: newUser.createdAt,
+      })
+      .then(({ error }) => {
+        if (error) console.error('Supabase user insert error:', error);
+      });
+  }
 
   return {
     success: true,
@@ -232,6 +480,25 @@ export function updateUserProfile(userId: string, updates: Partial<User>): User 
   Object.assign(user, updates);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   emitRealtimeEvent('user_updated', user);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const supabaseUpdates: any = {};
+    if (updates.name !== undefined) supabaseUpdates.name = updates.name;
+    if (updates.address !== undefined) supabaseUpdates.address = updates.address;
+    if (updates.password !== undefined) supabaseUpdates.password = updates.password;
+    if (updates.rabiaCredit !== undefined) supabaseUpdates.rabia_credit = updates.rabiaCredit;
+    if (updates.status !== undefined) supabaseUpdates.status = updates.status;
+
+    supabase
+      .from('users')
+      .update(supabaseUpdates)
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (error) console.error('Supabase user update error:', error);
+      });
+  }
+
   return user;
 }
 
@@ -242,6 +509,17 @@ export function approveUser(userId: string, approve: boolean = true) {
     user.status = approve ? 'approved' : 'rejected';
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
     emitRealtimeEvent('user_status_changed', user);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase
+        .from('users')
+        .update({ status: user.status })
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (error) console.error('Supabase user approval error:', error);
+        });
+    }
   }
 }
 
@@ -261,6 +539,7 @@ export function getTransactions(): CreditTransaction[] {
     return [];
   }
 }
+export const getCreditTransactions = getTransactions;
 
 export function adjustUserCredit(
   userId: string,
@@ -297,6 +576,34 @@ export function adjustUserCredit(
   const transactions = getTransactions();
   transactions.unshift(transaction);
   localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('users')
+      .update({ rabia_credit: user.rabiaCredit })
+      .eq('id', user.id)
+      .then(({ error }) => {
+        if (error) console.error('Supabase credit user update error:', error);
+      });
+
+    supabase
+      .from('credit_transactions')
+      .insert({
+        id: transaction.id,
+        user_id: transaction.userId,
+        user_phone: transaction.userPhone,
+        user_name: transaction.userName,
+        amount: transaction.amount,
+        type: transaction.type,
+        description: transaction.description,
+        created_at: transaction.createdAt,
+        admin_note: transaction.adminNote || null,
+      })
+      .then(({ error }) => {
+        if (error) console.error('Supabase transaction insert error:', error);
+      });
+  }
 
   emitRealtimeEvent('credit_updated', { userId: user.id, newCredit: user.rabiaCredit, transaction });
   return { success: true, newCredit: user.rabiaCredit, message: 'اعتبار با موفقیت به‌روزرسانی شد.' };
@@ -353,6 +660,31 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' | 'crea
 
   emitRealtimeEvent('order_created', newOrder);
 
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('orders')
+      .insert({
+        id: newOrder.id,
+        order_number: newOrder.orderNumber,
+        user_id: newOrder.userId || null,
+        user_name: newOrder.userName,
+        user_phone: newOrder.userPhone,
+        order_type: newOrder.orderType,
+        address: newOrder.address || null,
+        table_number: newOrder.tableNumber || null,
+        items: newOrder.items,
+        total_amount: newOrder.totalAmount,
+        payment_method: newOrder.paymentMethod,
+        status: newOrder.status,
+        created_at: newOrder.createdAt,
+        notes: newOrder.notes || null,
+      })
+      .then(({ error }) => {
+        if (error) console.error('Supabase order insert error:', error);
+      });
+  }
+
   return {
     success: true,
     order: newOrder,
@@ -367,6 +699,17 @@ export function updateOrderStatus(orderId: string, status: OrderStatus) {
     order.status = status;
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
     emitRealtimeEvent('order_status_updated', order);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase
+        .from('orders')
+        .update({ status })
+        .eq('id', orderId)
+        .then(({ error }) => {
+          if (error) console.error('Supabase order status update error:', error);
+        });
+    }
   }
 }
 
@@ -544,4 +887,166 @@ export function exportOrdersToExcelCSV() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+// ---------------- FULL DATABASE BACKUP & RESTORE (JSON IMPORT / EXPORT) ----------------
+export interface FullDatabaseBackup {
+  version: string;
+  exportedAt: string;
+  app: string;
+  orders: Order[];
+  users: User[];
+  menuItems: MenuItem[];
+  transactions: CreditTransaction[];
+}
+
+export function exportFullDatabaseBackup() {
+  const orders = getOrders();
+  const users = getUsers();
+  const menuItems = getMenuItems();
+  const transactions = getCreditTransactions();
+
+  const backupData: FullDatabaseBackup = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    app: 'Rabia Cafe',
+    orders,
+    users,
+    menuItems,
+    transactions,
+  };
+
+  const jsonStr = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const dateStr = new Date().toISOString().slice(0, 10);
+  link.download = `Rabia_Cafe_Database_Backup_${dateStr}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export async function importFullDatabaseBackup(
+  jsonData: string,
+  mode: 'replace' | 'merge' = 'merge'
+): Promise<{ success: boolean; message: string; counts?: { orders: number; users: number; menu: number } }> {
+  try {
+    const data = JSON.parse(jsonData) as Partial<FullDatabaseBackup>;
+    if (!data || typeof data !== 'object') {
+      return { success: false, message: 'فایل پشتیبان معتبر نیست یا قالب JSON صحیح ندارد.' };
+    }
+
+    const currentOrders = mode === 'replace' ? [] : getOrders();
+    const currentUsers = mode === 'replace' ? [] : getUsers();
+    const currentMenu = mode === 'replace' ? [] : getMenuItems();
+    const currentTrans = mode === 'replace' ? [] : getCreditTransactions();
+
+    let importedOrdersCount = 0;
+    let importedUsersCount = 0;
+    let importedMenuCount = 0;
+
+    // 1. Orders
+    if (Array.isArray(data.orders)) {
+      data.orders.forEach((newOrd) => {
+        if (!newOrd.id || !newOrd.orderNumber) return;
+        const exists = currentOrders.some((o) => o.id === newOrd.id || o.orderNumber === newOrd.orderNumber);
+        if (!exists || mode === 'replace') {
+          if (!exists) currentOrders.push(newOrd);
+          importedOrdersCount++;
+        }
+      });
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(currentOrders));
+    }
+
+    // 2. Users
+    if (Array.isArray(data.users)) {
+      data.users.forEach((newU) => {
+        if (!newU.id || !newU.phone) return;
+        const idx = currentUsers.findIndex((u) => u.id === newU.id || u.phone === newU.phone);
+        if (idx < 0) {
+          currentUsers.push(newU);
+          importedUsersCount++;
+        } else if (mode === 'replace') {
+          currentUsers[idx] = newU;
+          importedUsersCount++;
+        }
+      });
+      localStorage.setItem(USERS_KEY, JSON.stringify(currentUsers));
+    }
+
+    // 3. Menu items
+    if (Array.isArray(data.menuItems)) {
+      data.menuItems.forEach((newM) => {
+        if (!newM.id || !newM.name) return;
+        const idx = currentMenu.findIndex((m) => m.id === newM.id);
+        if (idx < 0) {
+          currentMenu.push(newM);
+          importedMenuCount++;
+        } else if (mode === 'replace') {
+          currentMenu[idx] = newM;
+          importedMenuCount++;
+        }
+      });
+      localStorage.setItem(MENU_KEY, JSON.stringify(currentMenu));
+    }
+
+    // 4. Transactions
+    if (Array.isArray(data.transactions)) {
+      data.transactions.forEach((tx) => {
+        if (!tx.id) return;
+        if (!currentTrans.some((t) => t.id === tx.id)) {
+          currentTrans.push(tx);
+        }
+      });
+      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(currentTrans));
+    }
+
+    emitRealtimeEvent('order_status_updated');
+    emitRealtimeEvent('user_updated');
+    emitRealtimeEvent('menu_updated');
+
+    // If Supabase is connected, optionally sync data to remote tables
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      if (Array.isArray(data.menuItems) && data.menuItems.length > 0) {
+        const mapped = data.menuItems.map((m) => ({
+          id: m.id,
+          name: m.name,
+          name_en: m.nameEn || null,
+          category: m.category,
+          price: m.price,
+          description: m.description,
+          ingredients: m.ingredients || [],
+          image: m.image || null,
+          is_available: m.isAvailable,
+          is_featured: m.isFeatured || false,
+        }));
+        await supabase.from('menu_items').upsert(mapped);
+      }
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        const mappedU = data.users.map((u) => ({
+          id: u.id,
+          name: u.name,
+          phone: u.phone,
+          password: u.password,
+          address: u.address || '',
+          rabia_credit: u.rabiaCredit || 0,
+          status: u.status,
+          created_at: u.createdAt,
+        }));
+        await supabase.from('users').upsert(mappedU);
+      }
+    }
+
+    return {
+      success: true,
+      message: `اطلاعات با موفقیت درون‌ریزی شد (${importedOrdersCount} سفارش، ${importedUsersCount} کاربر، ${importedMenuCount} آیتم منو).`,
+      counts: { orders: importedOrdersCount, users: importedUsersCount, menu: importedMenuCount },
+    };
+  } catch (err: any) {
+    return { success: false, message: `خطا در خواندن فایل پشتیبان: ${err?.message || err}` };
+  }
 }

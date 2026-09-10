@@ -91,16 +91,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full max-w-md rounded-3xl bg-[#181311] border border-[#C87D55]/30 shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md">
+      <div className="relative w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col rounded-2xl sm:rounded-3xl bg-[#181311] border border-[#C87D55]/30 shadow-2xl p-4 sm:p-8 animate-in zoom-in-95 duration-200 overflow-hidden">
         {/* Close */}
         <button
           onClick={onClose}
-          className="absolute left-4 top-4 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white transition-colors"
+          aria-label="بستن"
+          className="absolute left-3 top-3 sm:left-4 sm:top-4 z-20 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white transition-colors"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
+        <div className="overflow-y-auto flex-1 pr-0.5 sm:pr-1 -mr-0.5 sm:-mr-1 pl-1">
         {registeredPendingMessage ? (
           /* Registration Success & Pending Admin Approval Screen */
           <div className="text-center py-4 space-y-5">
@@ -319,6 +321,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -3,25 +3,76 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_KEY_URL = 'rabia_supabase_url';
 const STORAGE_KEY_KEY = 'rabia_supabase_key';
 
+export function isValidSupabaseUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith('YOUR_') || trimmed === 'MY_APP_URL') return false;
+  try {
+    const parsed = new URL(trimmed);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function getSupabaseConfig(): { url: string; key: string } {
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  let envUrl = '';
+  let envKey = '';
+  try {
+    envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+    envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  } catch {
+    // ignore
+  }
   
-  const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || envUrl;
-  const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || envKey;
+  let savedUrl = '';
+  let savedKey = '';
+  try {
+    savedUrl = localStorage.getItem(STORAGE_KEY_URL) || envUrl;
+    savedKey = localStorage.getItem(STORAGE_KEY_KEY) || envKey;
+  } catch {
+    savedUrl = envUrl;
+    savedKey = envKey;
+  }
+
+  savedUrl = (savedUrl || '').trim();
+  savedKey = (savedKey || '').trim();
+
+  // If saved URL is invalid or malformed, purge it from storage safely
+  if (savedUrl && !isValidSupabaseUrl(savedUrl)) {
+    try {
+      localStorage.removeItem(STORAGE_KEY_URL);
+    } catch {
+      // ignore
+    }
+    savedUrl = isValidSupabaseUrl(envUrl) ? envUrl.trim() : '';
+  }
 
   return {
-    url: savedUrl.trim(),
-    key: savedKey.trim(),
+    url: savedUrl,
+    key: savedKey,
   };
 }
 
 export function saveSupabaseConfig(url: string, key: string) {
-  if (url) localStorage.setItem(STORAGE_KEY_URL, url.trim());
-  else localStorage.removeItem(STORAGE_KEY_URL);
+  try {
+    const trimmedUrl = (url || '').trim();
+    const trimmedKey = (key || '').trim();
 
-  if (key) localStorage.setItem(STORAGE_KEY_KEY, key.trim());
-  else localStorage.removeItem(STORAGE_KEY_KEY);
+    if (trimmedUrl && isValidSupabaseUrl(trimmedUrl)) {
+      localStorage.setItem(STORAGE_KEY_URL, trimmedUrl);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_URL);
+    }
+
+    if (trimmedKey) {
+      localStorage.setItem(STORAGE_KEY_KEY, trimmedKey);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_KEY);
+    }
+  } catch {
+    // ignore
+  }
 
   _cachedClient = null;
 }
@@ -32,21 +83,80 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (_cachedClient) return _cachedClient;
 
   const { url, key } = getSupabaseConfig();
-  if (!url || !key) return null;
+  if (!url || !key || !isValidSupabaseUrl(url)) return null;
 
   try {
     _cachedClient = createClient(url, key);
     return _cachedClient;
-  } catch (err) {
-    console.error('Error initializing Supabase client:', err);
+  } catch {
     return null;
   }
 }
 
-export const SUPABASE_SQL_SCHEMA = `-- کدهای SQL برای ساخت جداول در Supabase SQL Editor
--- کافه رابیا (Rabia Café Database)
+export async function testSupabaseConnection(url?: string, key?: string): Promise<{ success: boolean; message: string; tablesFound?: boolean }> {
+  try {
+    const testUrl = (url || getSupabaseConfig().url || '').trim();
+    const testKey = (key || getSupabaseConfig().key || '').trim();
 
--- 1. جدول کاربران
+    if (!testUrl || !testKey) {
+      return { success: false, message: 'آدرس پروژه یا کلید Anon وارد نشده است.' };
+    }
+
+    if (!isValidSupabaseUrl(testUrl)) {
+      return {
+        success: false,
+        message: 'آدرس پروژه وارد شده معتبر نیست. آدرس باید با https:// شروع شود (مانند https://xyz.supabase.co).',
+      };
+    }
+
+    let client: SupabaseClient;
+    try {
+      client = createClient(testUrl, testKey);
+    } catch (initErr: any) {
+      return {
+        success: false,
+        message: `خطا در پارامترهای اتصال: ${initErr?.message || initErr}`,
+      };
+    }
+
+    // Try to query orders
+    const { data, error } = await client.from('orders').select('id').limit(1);
+
+    if (error) {
+      if (error.code === '42P01') {
+        // relation does not exist
+        return {
+          success: true,
+          tablesFound: false,
+          message: 'اتصال به سوپابیس برقرار شد، اما جداول هنوز ساخته نشده‌اند. لطفاً کدهای SQL را در بخش SQL Editor سوپابیس اجرا فرمایید.',
+        };
+      }
+      return {
+        success: false,
+        message: `خطا در ارتباط با سوپابیس: ${error.message} (${error.code || ''})`,
+      };
+    }
+
+    return {
+      success: true,
+      tablesFound: true,
+      message: 'ارتباط با دیتابیس سوپابیس و جداول با موفقیت برقرار است و سفارشات آنلاین به صورت زنده هماهنگ می‌شوند.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `خطای غیرمنتظره در اتصال: ${err?.message || err}`,
+    };
+  }
+}
+
+export const SUPABASE_SQL_SCHEMA = `-- ===============================================
+-- کدهای SQL برای ساخت جداول و اتصال زنده در Supabase
+-- کافه رابیا (Rabia Café Realtime Database)
+-- این کدها را کپی کرده و در بخش SQL Editor پنل Supabase خود یک‌بار اجرا (Run) کنید.
+-- ===============================================
+
+-- 1. جدول کاربران (مشتریان کافه)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -58,7 +168,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. جدول آیتم‌های منو
+-- 2. جدول آیتم‌های منوی کافه رابیا
 CREATE TABLE IF NOT EXISTS menu_items (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -73,11 +183,11 @@ CREATE TABLE IF NOT EXISTS menu_items (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. جدول سفارش‌ها
+-- 3. جدول سفارش‌ها (ثبت از تلفن همراه و دریافت در پنل مدیریت)
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   order_number TEXT NOT NULL,
-  user_id TEXT REFERENCES users(id),
+  user_id TEXT,
   user_name TEXT NOT NULL,
   user_phone TEXT NOT NULL,
   order_type TEXT NOT NULL, -- takeaway, dine_in
@@ -91,7 +201,7 @@ CREATE TABLE IF NOT EXISTS orders (
   notes TEXT
 );
 
--- 4. جدول تراکنش‌های اعتبار رابیا
+-- 4. جدول تراکنش‌های اعتبار حساب رابیا
 CREATE TABLE IF NOT EXISTS credit_transactions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -104,7 +214,24 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
   admin_note TEXT
 );
 
--- فعال‌سازی دسترسی بلادرنگ (Realtime Replication)
+-- غیرفعال کردن موقت RLS یا تنظیم دسترسی باز برای عملیات مشتریان
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public full access orders" ON orders;
+CREATE POLICY "Allow public full access orders" ON orders FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public full access users" ON users;
+CREATE POLICY "Allow public full access users" ON users FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public full access menu_items" ON menu_items;
+CREATE POLICY "Allow public full access menu_items" ON menu_items FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE credit_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public full access credit_transactions" ON credit_transactions;
+CREATE POLICY "Allow public full access credit_transactions" ON credit_transactions FOR ALL USING (true) WITH CHECK (true);
+
+-- فعال‌سازی انتشار بلادرنگ (Realtime Replication برای دریافت آنی سفارشات روی سیستم مدیریت)
 ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE users;
 ALTER PUBLICATION supabase_realtime ADD TABLE menu_items;

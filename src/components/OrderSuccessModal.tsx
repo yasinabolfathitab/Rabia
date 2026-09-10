@@ -28,14 +28,15 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
   const currentStep = getStatusStep(order.status);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full max-w-lg rounded-3xl bg-[#181311] border border-[#C87D55]/40 shadow-2xl p-6 sm:p-8 space-y-6 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md">
+      <div className="relative w-full max-w-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-[#181311] border border-[#C87D55]/40 shadow-2xl p-4 sm:p-8 space-y-4 sm:space-y-6 animate-in zoom-in-95 duration-200">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute left-4 top-4 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white transition-colors"
+          aria-label="بستن"
+          className="absolute left-3 top-3 sm:left-4 sm:top-4 z-20 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white transition-colors"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         {/* Header with checkmark */}
