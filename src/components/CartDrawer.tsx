@@ -116,7 +116,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         quantity: c.quantity,
       }));
 
-      const result = createOrder({
+      const result = await createOrder({
         userId: user?.id,
         userName: customerName.trim(),
         userPhone: customerPhone.trim(),

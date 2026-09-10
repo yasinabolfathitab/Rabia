@@ -73,11 +73,20 @@ export function subscribeRealtime(callback: (event: { type: string; payload?: an
 
 // ---------------- SUPABASE REALTIME & SYNC ----------------
 let isRealtimeSubscribed = false;
+let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export async function initSupabaseRealtimeSync() {
   const supabase = getSupabaseClient();
-  if (!supabase || isRealtimeSubscribed) return;
+  if (!supabase) return;
 
+  // Set up 4-second backup polling loop so even without websockets or on network sleep, orders refresh
+  if (!pollIntervalId && typeof window !== 'undefined') {
+    pollIntervalId = setInterval(() => {
+      syncAllWithSupabase();
+    }, 4000);
+  }
+
+  if (isRealtimeSubscribed) return;
   isRealtimeSubscribed = true;
 
   try {
@@ -621,11 +630,11 @@ export function getOrders(): Order[] {
   }
 }
 
-export function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'status'>): {
+export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'status'>): Promise<{
   success: boolean;
   order?: Order;
   message: string;
-} {
+}> {
   // If payment method is rabia_credit and user is provided, deduct credit
   if (orderInput.paymentMethod === 'rabia_credit' && orderInput.userId) {
     const user = getUsers().find((u) => u.id === orderInput.userId);
@@ -662,27 +671,31 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' | 'crea
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    supabase
-      .from('orders')
-      .insert({
-        id: newOrder.id,
-        order_number: newOrder.orderNumber,
-        user_id: newOrder.userId || null,
-        user_name: newOrder.userName,
-        user_phone: newOrder.userPhone,
-        order_type: newOrder.orderType,
-        address: newOrder.address || null,
-        table_number: newOrder.tableNumber || null,
-        items: newOrder.items,
-        total_amount: newOrder.totalAmount,
-        payment_method: newOrder.paymentMethod,
-        status: newOrder.status,
-        created_at: newOrder.createdAt,
-        notes: newOrder.notes || null,
-      })
-      .then(({ error }) => {
-        if (error) console.error('Supabase order insert error:', error);
-      });
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .insert({
+          id: newOrder.id,
+          order_number: newOrder.orderNumber,
+          user_id: newOrder.userId || null,
+          user_name: newOrder.userName,
+          user_phone: newOrder.userPhone,
+          order_type: newOrder.orderType,
+          address: newOrder.address || null,
+          table_number: newOrder.tableNumber || null,
+          items: newOrder.items,
+          total_amount: newOrder.totalAmount,
+          payment_method: newOrder.paymentMethod,
+          status: newOrder.status,
+          created_at: newOrder.createdAt,
+          notes: newOrder.notes || null,
+        });
+      if (error) {
+        console.error('Supabase order insert error:', error);
+      }
+    } catch (err) {
+      console.error('Supabase order insert exception:', err);
+    }
   }
 
   return {

@@ -32,8 +32,13 @@ import {
   KeyRound,
   Download,
   FileJson,
-  ShieldCheck
+  ShieldCheck,
+  AlertTriangle,
+  Bell,
+  Volume2,
+  Wifi
 } from 'lucide-react';
+import { playOrderAlertSound } from '../lib/sound';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -137,6 +142,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [importResultMsg, setImportResultMsg] = useState<{ success: boolean; text: string } | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
 
+  // New incoming order real-time alert banner
+  const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
+
   // Refresh all data
   const refreshData = () => {
     setOrders(getOrders());
@@ -170,6 +178,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       // Subscribe to real-time events
       const unsubscribe = subscribeRealtime((event) => {
         refreshData();
+        if (event.type === 'order_created' && event.payload) {
+          playOrderAlertSound();
+          setNewOrderAlert(event.payload);
+          setTimeout(() => {
+            setNewOrderAlert((cur) => (cur?.id === event.payload.id ? null : cur));
+          }, 10000);
+        }
       });
 
       return () => {
@@ -230,7 +245,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   };
 
   // In-Person Order & Deduct Credit
-  const handleDeductCredit = (e: React.FormEvent) => {
+  const handleDeductCredit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
     const num = parseInt(deductAmount, 10);
@@ -251,7 +266,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const res = adjustUserCredit(selectedUser.id, -num, 'in_person_order', deductNote);
     
     // Also record order in orders table
-    createOrder({
+    await createOrder({
       userId: selectedUser.id,
       userName: selectedUser.name,
       userPhone: selectedUser.phone,
@@ -543,6 +558,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           {/* TAB 1: ORDERS */}
           {activeTab === 'orders' && (
             <div className="space-y-4 max-w-7xl mx-auto">
+              {/* Realtime New Order Audio & Visual Alert Banner */}
+              {newOrderAlert && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-emerald-900/80 to-[#1C1613] border-2 border-emerald-500 shadow-2xl flex items-center justify-between gap-4 animate-in bounce-in duration-300">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/30 border border-emerald-400 text-emerald-300 flex items-center justify-center shrink-0 animate-pulse">
+                      <Bell className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-emerald-400 bg-emerald-950/90 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                          🔔 سفارش جدید ثبت شد!
+                        </span>
+                        <span className="text-xs text-emerald-200 font-bold">
+                          {newOrderAlert.orderNumber}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-black text-white mt-1">
+                        {newOrderAlert.userName} • {newOrderAlert.orderType === 'dine_in' ? `میز ${newOrderAlert.tableNumber || 'حضوری'}` : 'بیرون‌بر'} • {newOrderAlert.totalAmount?.toLocaleString('fa-IR')} تومان
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setNewOrderAlert(null)}
+                    className="p-2 rounded-xl bg-black/40 hover:bg-black/60 text-emerald-300 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Online Cloud Database Status Banner */}
+              {sbStatus?.success ? (
+                <div className="px-3.5 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span>همگام‌سازی ابری فعال است؛ سفارشات مشتریان به‌صورت لحظه‌ای از گوشی دریافت می‌شوند.</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400/80 hidden sm:inline">Supabase Online</span>
+                </div>
+              ) : (
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                    <div>
+                      <strong className="block text-[#FDFBF7] font-bold text-xs sm:text-sm">
+                        دیتابیس آنلاین (Supabase) متصل نیست!
+                      </strong>
+                      <p className="text-[11px] sm:text-xs text-amber-300/80 mt-0.5 leading-relaxed">
+                        برای اینکه سفارش‌های ثبت‌شده در گوشی مشتریان به این لپ‌تاپ برسد، باید آدرس و کلید Supabase ثبت شوند.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('database_settings')}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs font-bold transition-all shrink-0 self-end sm:self-center"
+                  >
+                    اتصال سریع دیتابیس
+                  </button>
+                </div>
+              )}
+
               {/* Order Status Filters */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
