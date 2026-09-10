@@ -1,0 +1,6 @@
+{
+  "name": "کافه رابیا | Rabia Café",
+  "description": "منوی آنلاین و سیستم سفارش‌گیری و مدیریت اعتبار کافه رابیا با تم کرم، مسی و مشکی",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-vazir: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-vazir);
+    direction: rtl;
+    background-color: #12100E;
+    color: #FDFBF7;
+    overflow-x: hidden;
+  }
+
+  /* Custom smooth scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #1A1614;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #C87D55;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #E0946B;
+  }
+}
+
+/* Luxury Copper & Cream Glow Utilities */
+.copper-gradient {
+  background: linear-gradient(135deg, #E0946B 0%, #C87D55 50%, #944B26 100%);
+}
+
+.copper-gradient-text {
+  background: linear-gradient(135deg, #F5D3C1 0%, #E0946B 50%, #C87D55 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.copper-border {
+  border-color: rgba(200, 125, 85, 0.35);
+}
+
+.copper-glow {
+  box-shadow: 0 8px 32px -4px rgba(200, 125, 85, 0.25);
+}
+
+.cream-card {
+  background-color: rgba(253, 251, 247, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(200, 125, 85, 0.2);
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
