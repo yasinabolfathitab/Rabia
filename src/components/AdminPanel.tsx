@@ -114,7 +114,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [editingItem, setEditingItem] = useState<Partial<MenuItem>>({
     name: '',
     nameEn: '',
-    category: 'hot_coffee',
+    category: 'espresso_milk',
     price: 90000,
     description: '',
     ingredients: [],
@@ -349,7 +349,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
       id: editingItem.id || 'item-' + Date.now(),
       name: editingItem.name,
       nameEn: editingItem.nameEn || '',
-      category: editingItem.category || 'hot_coffee',
+      category: editingItem.category || 'espresso_milk',
       price: Number(editingItem.price),
       description: editingItem.description || '',
       ingredients: ingArray.length > 0 ? ingArray : editingItem.ingredients || [],
@@ -493,9 +493,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               <h2 className="text-sm sm:text-lg font-black text-[#FDFBF7] flex items-center gap-1.5 sm:gap-2 truncate">
                 <span className="sm:hidden">پنل مدیریت</span>
                 <span className="hidden sm:inline">پنل اختصاصی مدیریت کافه رابیا</span>
-                <span className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-[#C87D55]/20 text-[#E0946B] border border-[#C87D55]/30 shrink-0">
-                  REAL-TIME
-                </span>
               </h2>
             </div>
           </div>
@@ -1206,7 +1203,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     setEditingItem({
                       name: '',
                       nameEn: '',
-                      category: 'hot_coffee',
+                      category: 'espresso_milk',
                       price: 90000,
                       description: '',
                       ingredients: [],
@@ -1340,16 +1337,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                         <div>
                           <label className="text-[#A8988C] block mb-1">دسته‌بندی:</label>
                           <select
-                            value={editingItem.category || 'hot_coffee'}
+                            value={editingItem.category || 'espresso_milk'}
                             onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value as MenuCategory })}
                             className="w-full bg-[#221B17] border border-[#C87D55]/30 rounded-xl p-2 text-[#FDFBF7] focus:outline-none"
                           >
-                            <option value="hot_coffee">قهوه گرم</option>
-                            <option value="cold_coffee">قهوه سرد</option>
-                            <option value="cold_drinks">نوشیدنی‌های سرد</option>
-                            <option value="special_mocktails">ماکتیل‌های ویژه</option>
+                            <option value="espresso_milk">اسپرسو و شیر</option>
+                            <option value="hot_bar">هات بار</option>
+                            <option value="tea_bar">تی بار</option>
+                            <option value="ice_coffee">آیس کافی</option>
+                            <option value="mocktail_bar">ماکتیل بار</option>
+                            <option value="shake_smoothie">شیک و اسموتی</option>
+                            <option value="signature">سیگنچر</option>
+                            <option value="antioxidant_bar">آنتی اکسیدان بار</option>
+                            <option value="affogato_bar">آفوگاتو بار</option>
                             <option value="cakes_desserts">کیک و دسر</option>
-                            <option value="breakfast_snacks">صبحانه و میان‌وعده</option>
+                            <option value="refresher">رفرشر</option>
                           </select>
                         </div>
 

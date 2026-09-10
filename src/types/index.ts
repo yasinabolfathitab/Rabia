@@ -12,12 +12,17 @@ export interface User {
 }
 
 export type MenuCategory = 
-  | 'hot_coffee'
-  | 'cold_coffee'
-  | 'cold_drinks'
+  | 'espresso_milk'
+  | 'hot_bar'
+  | 'tea_bar'
+  | 'ice_coffee'
+  | 'mocktail_bar'
+  | 'shake_smoothie'
+  | 'signature'
+  | 'antioxidant_bar'
+  | 'affogato_bar'
   | 'cakes_desserts'
-  | 'special_mocktails'
-  | 'breakfast_snacks';
+  | 'refresher';
 
 export interface MenuItem {
   id: string;

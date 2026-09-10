@@ -24,12 +24,17 @@ interface MenuSectionProps {
 
 const CATEGORIES: { id: MenuCategory | 'all'; label: string; icon: React.ReactNode }[] = [
   { id: 'all', label: 'همه آیتم‌ها', icon: <Sparkles className="w-4 h-4" /> },
-  { id: 'hot_coffee', label: 'قهوه گرم', icon: <Coffee className="w-4 h-4" /> },
-  { id: 'cold_coffee', label: 'قهوه سرد', icon: <CupSoda className="w-4 h-4" /> },
-  { id: 'cold_drinks', label: 'نوشیدنی‌های سرد', icon: <GlassWater className="w-4 h-4" /> },
-  { id: 'special_mocktails', label: 'ماکتیل‌های ویژه', icon: <GlassWater className="w-4 h-4" /> },
+  { id: 'espresso_milk', label: 'اسپرسو و شیر', icon: <Coffee className="w-4 h-4" /> },
+  { id: 'hot_bar', label: 'هات بار', icon: <Coffee className="w-4 h-4" /> },
+  { id: 'tea_bar', label: 'تی بار', icon: <Coffee className="w-4 h-4" /> },
+  { id: 'ice_coffee', label: 'آیس کافی', icon: <CupSoda className="w-4 h-4" /> },
+  { id: 'mocktail_bar', label: 'ماکتیل بار', icon: <GlassWater className="w-4 h-4" /> },
+  { id: 'shake_smoothie', label: 'شیک و اسموتی', icon: <CupSoda className="w-4 h-4" /> },
+  { id: 'signature', label: 'سیگنچر', icon: <Sparkles className="w-4 h-4" /> },
+  { id: 'antioxidant_bar', label: 'آنتی اکسیدان بار', icon: <Sparkles className="w-4 h-4" /> },
+  { id: 'affogato_bar', label: 'آفوگاتو بار', icon: <Cake className="w-4 h-4" /> },
   { id: 'cakes_desserts', label: 'کیک و دسر', icon: <Cake className="w-4 h-4" /> },
-  { id: 'breakfast_snacks', label: 'صبحانه و میان‌وعده', icon: <Utensils className="w-4 h-4" /> },
+  { id: 'refresher', label: 'رفرشر', icon: <GlassWater className="w-4 h-4" /> },
 ];
 
 export const MenuSection: React.FC<MenuSectionProps> = ({
