@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { MenuItem, MenuCategory, CartItem } from '../types';
+import { parseIsAvailable } from '../lib/database';
 import { 
   Coffee, 
   Search, 
@@ -145,14 +146,14 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item) => {
           const qty = getItemQuantity(item.id);
-          const isOutOfStock = !item.isAvailable;
+          const isOutOfStock = !parseIsAvailable(item.isAvailable);
 
           return (
             <div
               key={item.id}
               className={`relative rounded-2xl bg-gradient-to-b from-[#1C1714] to-[#161210] border transition-all duration-300 flex flex-col justify-between overflow-hidden group shadow-lg ${
                 isOutOfStock
-                  ? 'border-neutral-800 opacity-80'
+                  ? 'border-rose-900/40 opacity-85'
                   : 'border-[#C87D55]/20 hover:border-[#C87D55]/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-[#C87D55]/10'
               }`}
             >
@@ -164,20 +165,32 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                     alt={item.name}
                     loading="lazy"
                     className={`w-full h-full object-cover transition-transform duration-700 ${
-                      isOutOfStock ? 'grayscale' : 'group-hover:scale-105'
+                      isOutOfStock ? 'grayscale contrast-75 brightness-75' : 'group-hover:scale-105'
                     }`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#161210] via-transparent to-transparent"></div>
 
+                  {/* Out of Stock Central Image Overlay */}
+                  {isOutOfStock && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-3 text-center pointer-events-none">
+                      <div className="px-3.5 py-1.5 rounded-xl bg-rose-600/95 text-white font-black text-xs shadow-xl flex items-center gap-1.5 border border-rose-400">
+                        <AlertCircle className="w-4 h-4 text-white shrink-0" />
+                        <span>اتمام موجودی</span>
+                      </div>
+                      <span className="text-[11px] text-neutral-200 mt-1.5 font-medium">سفارش این آیتم موقتاً غیرفعال است</span>
+                    </div>
+                  )}
+
                   {/* Badges */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+                  <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
                     {item.isFeatured && (
                       <span className="px-2.5 py-1 rounded-full bg-[#C87D55]/90 text-white text-[10px] font-black backdrop-blur-sm shadow-md">
                         پیشنهاد باریستا
                       </span>
                     )}
                     {isOutOfStock && (
-                      <span className="px-2.5 py-1 rounded-full bg-rose-950/90 text-rose-300 border border-rose-800 text-[10px] font-bold backdrop-blur-sm">
+                      <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white border border-rose-400 text-[10px] font-black shadow-md flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                         اتمام موجودی
                       </span>
                     )}
@@ -228,9 +241,9 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
               {/* Bottom Card Action */}
               <div className="p-4 sm:p-5 pt-0 mt-auto">
                 {isOutOfStock ? (
-                  <div className="w-full py-2.5 px-3 rounded-xl bg-[#201A18] text-[#8C7B71] text-xs font-semibold text-center flex items-center justify-center gap-1.5 border border-neutral-800">
-                    <AlertCircle className="w-4 h-4 text-[#8C7B71]" />
-                    <span>در حال حاضر موجود نیست</span>
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-rose-950/50 text-rose-300 text-xs font-bold text-center flex items-center justify-center gap-1.5 border border-rose-800/80 shadow-sm">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>اتمام موجودی (امکان سفارش نیست)</span>
                   </div>
                 ) : qty > 0 ? (
                   <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/40 rounded-xl p-1.5">

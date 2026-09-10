@@ -68,6 +68,7 @@ import {
   saveMenuItem, 
   toggleMenuItemStock, 
   deleteMenuItem,
+  parseIsAvailable,
   getCafeStats,
   getChartData,
   exportOrdersToExcelCSV,
@@ -83,9 +84,10 @@ import { getSupabaseConfig, saveSupabaseConfig, SUPABASE_SQL_SCHEMA, getSupabase
 interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  onMenuUpdated?: () => void;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuUpdated }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'credit' | 'menu' | 'reports' | 'database_settings'>('orders');
 
   // Data states
@@ -313,6 +315,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     saveMenuItem(itemToSave);
     setIsEditingItem(false);
     refreshData();
+    onMenuUpdated?.();
+  };
+
+  // Toggle item stock
+  const handleToggleStock = async (itemId: string) => {
+    // Optimistically update local state immediately
+    setMenuItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId ? { ...it, isAvailable: !parseIsAvailable(it.isAvailable) } : it
+      )
+    );
+    await toggleMenuItemStock(itemId);
+    refreshData();
+    onMenuUpdated?.();
   };
 
   // Handle local image file upload
@@ -1098,17 +1114,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     {/* Stock Status Toggle & Edit/Delete */}
                     <div className="flex items-center justify-between pt-2 border-t border-[#C87D55]/15">
                       <button
-                        onClick={() => {
-                          toggleMenuItemStock(it.id);
-                          refreshData();
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                          it.isAvailable
-                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-700/50'
-                            : 'bg-rose-950/60 text-rose-300 border border-rose-700/50'
+                        onClick={() => handleToggleStock(it.id)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          parseIsAvailable(it.isAvailable)
+                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/70 hover:bg-emerald-900/90'
+                            : 'bg-rose-950/80 text-rose-300 border border-rose-600/70 hover:bg-rose-900/90'
                         }`}
+                        title={parseIsAvailable(it.isAvailable) ? 'کلیک کنید تا اتمام موجودی شود' : 'کلیک کنید تا موجود در منو شود'}
                       >
-                        {it.isAvailable ? '✓ موجود در منو' : '✗ اتمام موجودی'}
+                        <span className={`w-2 h-2 rounded-full ${parseIsAvailable(it.isAvailable) ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                        <span>{parseIsAvailable(it.isAvailable) ? '✓ موجود در منو' : '✗ اتمام موجودی'}</span>
                       </button>
 
                       <div className="flex items-center gap-1">
@@ -1128,6 +1143,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             if (confirm(`آیا از حذف آیتم "${it.name}" اطمینان دارید؟`)) {
                               deleteMenuItem(it.id);
                               refreshData();
+                              onMenuUpdated?.();
                             }
                           }}
                           className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:text-rose-200"

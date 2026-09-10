@@ -12,7 +12,7 @@ import { CreditInfoModal } from './components/CreditInfoModal';
 import { Footer } from './components/Footer';
 
 import { User, MenuItem, CartItem, Order } from './types';
-import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync } from './lib/database';
+import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync, parseIsAvailable } from './lib/database';
 import { ShoppingBag, ArrowUp } from 'lucide-react';
 
 export default function App() {
@@ -133,6 +133,9 @@ export default function App() {
 
   // Cart operations
   const handleAddToCart = (item: MenuItem) => {
+    if (!parseIsAvailable(item.isAvailable)) {
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((c) => c.item.id === item.id);
       if (existing) {
@@ -145,6 +148,12 @@ export default function App() {
   };
 
   const handleUpdateCartQuantity = (itemId: string, delta: number) => {
+    if (delta > 0) {
+      const currentItem = menuItems.find((i) => i.id === itemId);
+      if (currentItem && !parseIsAvailable(currentItem.isAvailable)) {
+        return;
+      }
+    }
     setCart((prev) => {
       return prev
         .map((c) => {
@@ -312,7 +321,13 @@ export default function App() {
       {/* Full Admin Panel */}
       <AdminPanel
         isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
+        onClose={() => {
+          setIsAdminOpen(false);
+          setMenuItems(getMenuItems());
+        }}
+        onMenuUpdated={() => {
+          setMenuItems(getMenuItems());
+        }}
       />
 
       {/* Credit System Information Modal */}

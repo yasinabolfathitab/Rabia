@@ -71,6 +71,12 @@ export function subscribeRealtime(callback: (event: { type: string; payload?: an
   };
 }
 
+// Helper to parse availability boolean strictly
+export function parseIsAvailable(val: any): boolean {
+  if (val === false || val === 'false' || val === 0 || val === '0') return false;
+  return true;
+}
+
 // ---------------- SUPABASE REALTIME & SYNC ----------------
 let isRealtimeSubscribed = false;
 let pollIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -203,7 +209,7 @@ export async function initSupabaseRealtimeSync() {
               description: raw.description || '',
               ingredients: raw.ingredients || [],
               image: raw.image || '',
-              isAvailable: raw.is_available,
+              isAvailable: parseIsAvailable(raw.is_available),
               isFeatured: raw.is_featured,
             };
             const idx = items.findIndex((i) => i.id === item.id);
@@ -284,21 +290,41 @@ export async function syncAllWithSupabase() {
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (!mErr && dbMenu && dbMenu.length > 0) {
-      const mappedMenu: MenuItem[] = dbMenu.map((raw: any) => ({
-        id: raw.id,
-        name: raw.name,
-        nameEn: raw.name_en || '',
-        category: raw.category,
-        price: Number(raw.price),
-        description: raw.description || '',
-        ingredients: raw.ingredients || [],
-        image: raw.image || '',
-        isAvailable: raw.is_available,
-        isFeatured: raw.is_featured,
-      }));
-      localStorage.setItem(MENU_KEY, JSON.stringify(mappedMenu));
-      emitRealtimeEvent('menu_updated');
+    if (!mErr && dbMenu) {
+      if (dbMenu.length > 0) {
+        const mappedMenu: MenuItem[] = dbMenu.map((raw: any) => ({
+          id: raw.id,
+          name: raw.name,
+          nameEn: raw.name_en || '',
+          category: raw.category,
+          price: Number(raw.price),
+          description: raw.description || '',
+          ingredients: raw.ingredients || [],
+          image: raw.image || '',
+          isAvailable: parseIsAvailable(raw.is_available),
+          isFeatured: raw.is_featured,
+        }));
+        localStorage.setItem(MENU_KEY, JSON.stringify(mappedMenu));
+        emitRealtimeEvent('menu_updated');
+      } else {
+        // Table exists in Supabase but is empty: automatically seed current menu so all devices have it!
+        const localMenu = getMenuItems();
+        if (localMenu && localMenu.length > 0) {
+          const payload = localMenu.map((m) => ({
+            id: m.id,
+            name: m.name,
+            name_en: m.nameEn || null,
+            category: m.category,
+            price: m.price,
+            description: m.description,
+            ingredients: m.ingredients || [],
+            image: m.image || null,
+            is_available: parseIsAvailable(m.isAvailable),
+            is_featured: m.isFeatured || false,
+          }));
+          await supabase.from('menu_items').upsert(payload);
+        }
+      }
     }
   } catch (e) {
     console.warn('Sync with Supabase failed:', e);
@@ -309,69 +335,106 @@ export async function syncAllWithSupabase() {
 export function getMenuItems(): MenuItem[] {
   try {
     const data = localStorage.getItem(MENU_KEY);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(MENU_KEY, JSON.stringify(INITIAL_MENU_ITEMS));
-    return INITIAL_MENU_ITEMS;
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item: MenuItem) => ({
+          ...item,
+          isAvailable: parseIsAvailable(item.isAvailable),
+        }));
+      }
+    }
+    const cleanInitial = INITIAL_MENU_ITEMS.map((item) => ({
+      ...item,
+      isAvailable: parseIsAvailable(item.isAvailable),
+    }));
+    localStorage.setItem(MENU_KEY, JSON.stringify(cleanInitial));
+    return cleanInitial;
   } catch {
     return INITIAL_MENU_ITEMS;
   }
 }
 
 export function saveMenuItem(item: MenuItem): MenuItem {
+  const cleanItem: MenuItem = {
+    ...item,
+    isAvailable: parseIsAvailable(item.isAvailable),
+  };
   const items = getMenuItems();
-  const index = items.findIndex((i) => i.id === item.id);
+  const index = items.findIndex((i) => i.id === cleanItem.id);
   if (index >= 0) {
-    items[index] = item;
+    items[index] = cleanItem;
   } else {
-    items.unshift(item);
+    items.unshift(cleanItem);
   }
   localStorage.setItem(MENU_KEY, JSON.stringify(items));
-  emitRealtimeEvent('menu_updated', item);
+  emitRealtimeEvent('menu_updated', cleanItem);
 
   const supabase = getSupabaseClient();
   if (supabase) {
     supabase
       .from('menu_items')
       .upsert({
-        id: item.id,
-        name: item.name,
-        name_en: item.nameEn || null,
-        category: item.category,
-        price: item.price,
-        description: item.description,
-        ingredients: item.ingredients || [],
-        image: item.image || null,
-        is_available: item.isAvailable,
-        is_featured: item.isFeatured || false,
+        id: cleanItem.id,
+        name: cleanItem.name,
+        name_en: cleanItem.nameEn || null,
+        category: cleanItem.category,
+        price: cleanItem.price,
+        description: cleanItem.description,
+        ingredients: cleanItem.ingredients || [],
+        image: cleanItem.image || null,
+        is_available: cleanItem.isAvailable,
+        is_featured: cleanItem.isFeatured || false,
       })
       .then(({ error }) => {
         if (error) console.error('Supabase menu upsert error:', error);
       });
   }
 
-  return item;
+  return cleanItem;
 }
 
-export function toggleMenuItemStock(itemId: string): boolean {
+export async function toggleMenuItemStock(itemId: string): Promise<boolean> {
   const items = getMenuItems();
   const item = items.find((i) => i.id === itemId);
   if (item) {
-    item.isAvailable = !item.isAvailable;
+    const currentVal = parseIsAvailable(item.isAvailable);
+    const newStatus = !currentVal;
+    item.isAvailable = newStatus;
     localStorage.setItem(MENU_KEY, JSON.stringify(items));
     emitRealtimeEvent('menu_updated', item);
 
     const supabase = getSupabaseClient();
     if (supabase) {
-      supabase
-        .from('menu_items')
-        .update({ is_available: item.isAvailable })
-        .eq('id', itemId)
-        .then(({ error }) => {
-          if (error) console.error('Supabase toggle stock error:', error);
-        });
+      try {
+        const { error } = await supabase
+          .from('menu_items')
+          .upsert({
+            id: item.id,
+            name: item.name,
+            name_en: item.nameEn || null,
+            category: item.category,
+            price: item.price,
+            description: item.description,
+            ingredients: item.ingredients || [],
+            image: item.image || null,
+            is_available: newStatus,
+            is_featured: item.isFeatured || false,
+          });
+
+        if (error) {
+          console.warn('Supabase upsert menu stock error, trying update fallback:', error);
+          await supabase
+            .from('menu_items')
+            .update({ is_available: newStatus })
+            .eq('id', itemId);
+        }
+      } catch (err) {
+        console.error('Supabase toggle stock error:', err);
+      }
     }
 
-    return item.isAvailable;
+    return newStatus;
   }
   return false;
 }

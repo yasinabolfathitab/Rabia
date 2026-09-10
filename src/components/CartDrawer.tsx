@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CartItem, OrderType, PaymentMethod, User, Order } from '../types';
-import { createOrder } from '../lib/database';
+import { createOrder, getMenuItems, parseIsAvailable } from '../lib/database';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -75,6 +75,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     if (cart.length === 0) {
       setErrorMessage('سبد خرید شما خالی است.');
+      return;
+    }
+
+    const currentMenu = getMenuItems();
+    const outOfStockInCart = cart.find((c) => {
+      const liveItem = currentMenu.find((m) => m.id === c.item.id);
+      return liveItem ? !parseIsAvailable(liveItem.isAvailable) : !parseIsAvailable(c.item.isAvailable);
+    });
+    if (outOfStockInCart) {
+      setErrorMessage(`متأسفانه آیتم "${outOfStockInCart.item.name}" در حال حاضر اتمام موجودی شده است. لطفاً آن را از سبد خرید حذف کنید.`);
       return;
     }
 
@@ -204,47 +214,82 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </button>
               </div>
 
-              {cart.map((c) => (
-                <div
-                  key={c.item.id}
-                  className="p-3 rounded-2xl bg-[#1D1815] border border-[#C87D55]/20 flex items-center justify-between gap-3"
-                >
-                  <img
-                    src={c.item.image}
-                    alt={c.item.name}
-                    className="w-14 h-14 rounded-xl object-cover border border-[#C87D55]/20 shrink-0"
-                  />
+              {cart.map((c) => {
+                const currentMenu = getMenuItems();
+                const liveItem = currentMenu.find((m) => m.id === c.item.id);
+                const isOutOfStock = liveItem ? !parseIsAvailable(liveItem.isAvailable) : !parseIsAvailable(c.item.isAvailable);
 
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
-                      {c.item.name}
-                    </h4>
-                    <div className="text-xs font-semibold text-[#E0946B] mt-1">
-                      {(c.item.price * c.quantity).toLocaleString('fa-IR')}{' '}
-                      <span className="text-[10px] text-[#A8988C]">تومان</span>
+                return (
+                  <div
+                    key={c.item.id}
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-3 ${
+                      isOutOfStock
+                        ? 'bg-rose-950/20 border-rose-800/60'
+                        : 'bg-[#1D1815] border-[#C87D55]/20'
+                    }`}
+                  >
+                    <div className="relative shrink-0">
+                      <img
+                        src={c.item.image}
+                        alt={c.item.name}
+                        className={`w-14 h-14 rounded-xl object-cover border shrink-0 ${
+                          isOutOfStock
+                            ? 'grayscale contrast-75 border-rose-800/60'
+                            : 'border-[#C87D55]/20'
+                        }`}
+                      />
+                      {isOutOfStock && (
+                        <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center">
+                          <span className="text-[9px] font-black text-rose-300 px-1 bg-rose-950/80 rounded border border-rose-800">
+                            ناموجود
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
+                          {c.item.name}
+                        </h4>
+                        {isOutOfStock && (
+                          <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-800">
+                            اتمام موجودی
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-semibold text-[#E0946B] mt-1">
+                        {(c.item.price * c.quantity).toLocaleString('fa-IR')}{' '}
+                        <span className="text-[10px] text-[#A8988C]">تومان</span>
+                      </div>
+                    </div>
+
+                    {/* Quantity Stepper */}
+                    <div className="flex items-center gap-1.5 bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-1">
+                      <button
+                        onClick={() => onUpdateCartQuantity(c.item.id, 1)}
+                        disabled={isOutOfStock}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all text-xs font-bold ${
+                          isOutOfStock
+                            ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                            : 'copper-gradient text-white hover:scale-105 active:scale-95'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-6 text-center text-xs font-bold text-white">
+                        {c.quantity}
+                      </span>
+                      <button
+                        onClick={() => onUpdateCartQuantity(c.item.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-[#2D2420] text-[#E0946B] hover:bg-[#3D322B] flex items-center justify-center transition-all text-xs font-bold"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-
-                  {/* Quantity Stepper */}
-                  <div className="flex items-center gap-1.5 bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-1">
-                    <button
-                      onClick={() => onUpdateCartQuantity(c.item.id, 1)}
-                      className="w-7 h-7 rounded-lg copper-gradient text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-xs font-bold"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-bold text-white">
-                      {c.quantity}
-                    </span>
-                    <button
-                      onClick={() => onUpdateCartQuantity(c.item.id, -1)}
-                      className="w-7 h-7 rounded-lg bg-[#2D2420] text-[#E0946B] hover:bg-[#3D322B] flex items-center justify-center transition-all text-xs font-bold"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
