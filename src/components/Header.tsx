@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, ShoppingBag, User as UserIcon, Lock, Sparkles, MapPin, CheckCircle2 } from 'lucide-react';
+import { Coffee, ShoppingBag, User as UserIcon, Lock, Sparkles, MapPin, CheckCircle2, Clock } from 'lucide-react';
 import { User } from '../types';
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onOpenAdminLogin: () => void;
   onOpenMenu: () => void;
+  onOpenTracking: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfile,
   onOpenAdminLogin,
   onOpenMenu,
+  onOpenTracking,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-[#161311]/90 backdrop-blur-md border-b border-[#C87D55]/20 transition-all duration-300">
@@ -46,9 +48,9 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onOpenMenu}
           className="flex items-center gap-2.5 sm:gap-3 group text-right focus:outline-none shrink-0"
         >
-          <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl copper-gradient flex items-center justify-center shadow-lg shadow-[#C87D55]/20 group-hover:scale-105 transition-transform duration-300">
-            <Coffee className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            <div className="absolute -top-1 -right-1 w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 rounded-full bg-[#F5D3C1] border-2 border-[#161311]"></div>
+          <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg shadow-[#C87D55]/20 group-hover:scale-105 transition-transform duration-300 border border-[#C87D55]/40 bg-[#F6E3CE] flex items-center justify-center p-0.5">
+            <img src="/Rabia_Logo.jpg" alt="لوگوی کافه رابیا" className="w-full h-full object-contain" />
+            <div className="absolute -top-1 -right-1 w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 rounded-full bg-[#C87D55] border-2 border-[#161311]"></div>
           </div>
           {/* In mobile, hide "کافه رابیا", "RABIA", and "منوی لوکس و سیستم سفارش هوشمند" */}
           <div className="hidden sm:block">
@@ -96,6 +98,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span>ورود / عضویت</span>
             </button>
           )}
+
+          {/* Order Tracking Button */}
+          <button
+            onClick={onOpenTracking}
+            aria-label="پیگیری سفارش"
+            title="پیگیری آنلاین مراحل سفارش"
+            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-xl bg-[#221B18] hover:bg-[#2C231F] border border-[#C87D55]/30 hover:border-[#C87D55] text-xs sm:text-sm font-medium text-[#FDFBF7] hover:text-[#E0946B] transition-all shrink-0 group"
+          >
+            <div className="relative">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C87D55] group-hover:rotate-45 transition-transform" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+            <span className="hidden sm:inline">پیگیری سفارش</span>
+            <span className="sm:hidden text-xs">پیگیری</span>
+          </button>
 
           {/* Cart Button */}
           <button

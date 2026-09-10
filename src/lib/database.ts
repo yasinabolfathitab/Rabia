@@ -730,6 +730,9 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
   orders.unshift(newOrder);
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
 
+  // Save to customer recent orders list
+  saveRecentCustomerOrderNumber(newOrder.orderNumber);
+
   emitRealtimeEvent('order_created', newOrder);
 
   const supabase = getSupabaseClient();
@@ -787,6 +790,107 @@ export function updateOrderStatus(orderId: string, status: OrderStatus) {
         });
     }
   }
+}
+
+// ---------------- ORDER TRACKING HELPERS ----------------
+const RECENT_CUSTOMER_ORDERS_KEY = 'rabia_customer_recent_orders';
+
+export function getRecentCustomerOrderNumbers(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_CUSTOMER_ORDERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveRecentCustomerOrderNumber(orderNumber: string) {
+  try {
+    const list = getRecentCustomerOrderNumbers().filter((n) => n !== orderNumber);
+    list.unshift(orderNumber);
+    localStorage.setItem(RECENT_CUSTOMER_ORDERS_KEY, JSON.stringify(list.slice(0, 10)));
+  } catch (e) {
+    console.warn('Failed to save recent order number:', e);
+  }
+}
+
+export function searchOrders(query: string): Order[] {
+  const clean = query.trim().toLowerCase().replace('#', '');
+  if (!clean) return [];
+
+  const orders = getOrders();
+  const digitOnly = clean.replace(/[^0-9]/g, '');
+
+  return orders.filter((o) => {
+    const ordNum = o.orderNumber.toLowerCase().replace('#', '');
+    const phone = o.userPhone.replace(/[^0-9]/g, '');
+    const name = o.userName.toLowerCase();
+
+    if (ordNum.includes(clean)) return true;
+    if (digitOnly && digitOnly.length >= 3 && phone.includes(digitOnly)) return true;
+    if (clean.length >= 2 && name.includes(clean)) return true;
+    return false;
+  });
+}
+
+export async function fetchLiveOrder(query: string): Promise<Order | null> {
+  const clean = query.trim().replace('#', '');
+  if (!clean) return null;
+
+  // 1. Check local memory first
+  const localOrders = getOrders();
+  const foundLocal = localOrders.find((o) => 
+    o.id === query ||
+    o.orderNumber.replace('#', '').toLowerCase() === clean.toLowerCase()
+  );
+
+  // 2. Also query Supabase if available for latest status
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .or(`id.eq.${query},order_number.ilike.%${clean}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        const liveOrder: Order = {
+          id: data.id,
+          orderNumber: data.order_number,
+          userId: data.user_id || undefined,
+          userName: data.user_name,
+          userPhone: data.user_phone,
+          orderType: data.order_type,
+          address: data.address || undefined,
+          tableNumber: data.table_number || undefined,
+          items: typeof data.items === 'string' ? JSON.parse(data.items) : data.items,
+          totalAmount: Number(data.total_amount),
+          paymentMethod: data.payment_method,
+          status: data.status,
+          createdAt: data.created_at,
+          notes: data.notes || undefined,
+        };
+
+        // Update local storage cache
+        const all = getOrders();
+        const idx = all.findIndex((o) => o.id === liveOrder.id);
+        if (idx >= 0) {
+          all[idx] = liveOrder;
+        } else {
+          all.unshift(liveOrder);
+        }
+        localStorage.setItem(ORDERS_KEY, JSON.stringify(all));
+
+        return liveOrder;
+      }
+    } catch (e) {
+      console.warn('Supabase fetchLiveOrder error, using local cache:', e);
+    }
+  }
+
+  return foundLocal || null;
 }
 
 // ---------------- STATS & REPORTS ----------------
@@ -1124,5 +1228,86 @@ export async function importFullDatabaseBackup(
     };
   } catch (err: any) {
     return { success: false, message: `خطا در خواندن فایل پشتیبان: ${err?.message || err}` };
+  }
+}
+
+// ---------------- PURGE / CLEAR DATABASE OPERATIONS ----------------
+export async function clearAllOrders(): Promise<{ success: boolean; message: string }> {
+  try {
+    // 1. Clear local storage orders & customer recent orders tracking
+    localStorage.setItem(ORDERS_KEY, JSON.stringify([]));
+    localStorage.removeItem('rabia_customer_recent_orders');
+
+    // 2. Clear from Supabase if connected
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('orders').delete().not('id', 'is', null);
+      } catch (sbErr) {
+        console.warn('Supabase clearAllOrders error:', sbErr);
+      }
+    }
+
+    emitRealtimeEvent('order_status_updated');
+    return { success: true, message: 'تمام سفارش‌ها با موفقیت پاکسازی شدند.' };
+  } catch (err: any) {
+    return { success: false, message: `خطا در پاکسازی سفارش‌ها: ${err?.message || err}` };
+  }
+}
+
+export async function clearAllUsers(): Promise<{ success: boolean; message: string }> {
+  try {
+    // 1. Clear local storage users & credit transactions
+    localStorage.setItem(USERS_KEY, JSON.stringify([]));
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([]));
+
+    // 2. Clear from Supabase if connected
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('transactions').delete().not('id', 'is', null);
+        await supabase.from('users').delete().not('id', 'is', null);
+      } catch (sbErr) {
+        console.warn('Supabase clearAllUsers error:', sbErr);
+      }
+    }
+
+    emitRealtimeEvent('user_updated');
+    return { success: true, message: 'تمام کاربران با موفقیت پاکسازی شدند.' };
+  } catch (err: any) {
+    return { success: false, message: `خطا در پاکسازی کاربران: ${err?.message || err}` };
+  }
+}
+
+export async function clearAllDatabaseData(): Promise<{ success: boolean; message: string }> {
+  try {
+    // 1. Clear orders, users, transactions, and recent orders
+    localStorage.setItem(ORDERS_KEY, JSON.stringify([]));
+    localStorage.setItem(USERS_KEY, JSON.stringify([]));
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([]));
+    localStorage.removeItem('rabia_customer_recent_orders');
+
+    // Reset menu to clean initial items
+    localStorage.setItem(MENU_KEY, JSON.stringify(INITIAL_MENU_ITEMS));
+
+    // 2. Clear from Supabase if connected
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('orders').delete().not('id', 'is', null);
+        await supabase.from('transactions').delete().not('id', 'is', null);
+        await supabase.from('users').delete().not('id', 'is', null);
+      } catch (sbErr) {
+        console.warn('Supabase clearAllDatabaseData error:', sbErr);
+      }
+    }
+
+    emitRealtimeEvent('order_status_updated');
+    emitRealtimeEvent('user_updated');
+    emitRealtimeEvent('menu_updated');
+
+    return { success: true, message: 'تمام اطلاعات دیتابیس (سفارش‌ها، کاربران و تراکنش‌ها) با موفقیت پاکسازی شدند.' };
+  } catch (err: any) {
+    return { success: false, message: `خطا در پاکسازی کامل دیتابیس: ${err?.message || err}` };
   }
 }

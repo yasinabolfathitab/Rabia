@@ -5,9 +5,10 @@ import { Order } from '../types';
 interface OrderSuccessModalProps {
   order: Order | null;
   onClose: () => void;
+  onTrackOrder?: (orderNumber: string) => void;
 }
 
-export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose }) => {
+export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose, onTrackOrder }) => {
   if (!order) return null;
 
   const getStatusStep = (status: string) => {
@@ -39,10 +40,13 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
           <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        {/* Header with checkmark */}
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 rounded-full copper-gradient mx-auto flex items-center justify-center text-white shadow-xl shadow-[#C87D55]/30">
-            <CheckCircle2 className="w-8 h-8" />
+        {/* Header with official logo and checkmark */}
+        <div className="text-center space-y-2.5">
+          <div className="relative w-16 h-16 mx-auto rounded-2xl overflow-hidden border border-[#C87D55]/50 bg-[#F6E3CE] p-1 shadow-xl shadow-[#C87D55]/30">
+            <img src="/Rabia_Logo.jpg" alt="لوگوی کافه رابیا" className="w-full h-full object-contain" />
+            <div className="absolute -bottom-1 -left-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#181311] flex items-center justify-center text-white">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
           </div>
           <h3 className="text-xl sm:text-2xl font-black text-[#FDFBF7]">
             سفارش شما با موفقیت ثبت شد!
@@ -150,13 +154,28 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
           ))}
         </div>
 
-        {/* Action Button */}
-        <button
-          onClick={onClose}
-          className="w-full py-3 rounded-2xl copper-gradient text-white font-bold text-sm shadow-lg shadow-[#C87D55]/25 hover:shadow-[#C87D55]/40 transition-all"
-        >
-          متوجه شدم، بازگشت به منو
-        </button>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+          {onTrackOrder && (
+            <button
+              onClick={() => {
+                onClose();
+                onTrackOrder(order.orderNumber);
+              }}
+              className="flex-1 py-3 rounded-2xl copper-gradient text-white font-bold text-sm shadow-lg shadow-[#C87D55]/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              <span>مشاهده زنده مراحل سفارش</span>
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="py-3 px-5 rounded-2xl bg-[#241E1B] hover:bg-[#2F2723] border border-[#C87D55]/30 text-[#D8C7B8] hover:text-white font-bold text-sm transition-all"
+          >
+            بازگشت به منو
+          </button>
+        </div>
       </div>
     </div>
   );

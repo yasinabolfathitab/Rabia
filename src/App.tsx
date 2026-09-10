@@ -9,6 +9,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { AdminPanel } from './components/AdminPanel';
 import { CreditInfoModal } from './components/CreditInfoModal';
+import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { Footer } from './components/Footer';
 
 import { User, MenuItem, CartItem, Order } from './types';
@@ -53,8 +54,15 @@ export default function App() {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isCreditInfoOpen, setIsCreditInfoOpen] = useState(false);
+  const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  const [trackingOrderNumber, setTrackingOrderNumber] = useState<string | undefined>(undefined);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const handleOpenTracking = (orderNumber?: string) => {
+    setTrackingOrderNumber(orderNumber);
+    setIsTrackingOpen(true);
+  };
 
   // Monitor scroll position to show/hide the back to top button
   useEffect(() => {
@@ -192,6 +200,7 @@ export default function App() {
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onOpenMenu={handleScrollToMenu}
+        onOpenTracking={() => handleOpenTracking()}
       />
 
       {/* Main Page Content */}
@@ -261,6 +270,7 @@ export default function App() {
       <Footer
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onOpenCreditModal={() => setIsCreditInfoOpen(true)}
+        onOpenTracking={() => handleOpenTracking()}
       />
 
       {/* Cart Drawer */}
@@ -284,6 +294,19 @@ export default function App() {
       <OrderSuccessModal
         order={successOrder}
         onClose={() => setSuccessOrder(null)}
+        onTrackOrder={(orderNumber) => handleOpenTracking(orderNumber)}
+      />
+
+      {/* Live Order Tracking Modal */}
+      <OrderTrackingModal
+        isOpen={isTrackingOpen}
+        onClose={() => {
+          setIsTrackingOpen(false);
+          setTrackingOrderNumber(undefined);
+        }}
+        initialOrderNumber={trackingOrderNumber}
+        currentUser={currentUser}
+        onOpenMenu={handleScrollToMenu}
       />
 
       {/* Auth Modal (Login / Register with Admin Approval message) */}
@@ -306,6 +329,7 @@ export default function App() {
           setIsProfileOpen(false);
           setIsCartOpen(true);
         }}
+        onOpenTracking={(orderNumber) => handleOpenTracking(orderNumber)}
       />
 
       {/* Admin Login Modal (password: 12345678, no hint) */}

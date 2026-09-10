@@ -23,6 +23,7 @@ interface UserProfileModalProps {
   onUpdateUser: (updatedUser: User) => void;
   onLogout: () => void;
   onOpenCart: () => void;
+  onOpenTracking?: (orderNumber: string) => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -32,6 +33,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onUpdateUser,
   onLogout,
   onOpenCart,
+  onOpenTracking,
 }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'credit'>('profile');
   const [name, setName] = useState('');
@@ -274,11 +276,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       {ord.items.map((it) => `${it.name} (${it.quantity})`).join('، ')}
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#8C7B71] pt-1 border-t border-[#C87D55]/10">
+                    <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#8C7B71] pt-1.5 border-t border-[#C87D55]/10">
                       <span>{new Date(ord.createdAt).toLocaleDateString('fa-IR')}</span>
-                      <span className="text-[#E0946B] font-semibold">
-                        {ord.status === 'delivered' ? 'تحویل داده شده' : 'در حال پیگیری'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#E0946B] font-semibold">
+                          {ord.status === 'delivered' ? 'تحویل داده شده' : 'در حال پیگیری'}
+                        </span>
+                        {onOpenTracking && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onOpenTracking(ord.orderNumber);
+                            }}
+                            className="px-2 py-0.5 rounded bg-[#2F241F] hover:bg-[#C87D55] text-[#F5D3C1] hover:text-white font-bold transition-colors"
+                          >
+                            پیگیری مراحل
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))

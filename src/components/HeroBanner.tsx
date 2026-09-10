@@ -98,6 +98,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
                   <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-[#161311]/80 backdrop-blur-md border border-[#C87D55]/40 text-[11px] font-bold text-[#F5D3C1]">
                     امضای کافه رابیا
                   </div>
+                  <div className="absolute bottom-3 left-3 w-12 h-12 rounded-xl overflow-hidden border border-[#C87D55]/50 bg-[#F6E3CE] p-0.5 shadow-xl shadow-black/60 group-hover:scale-110 transition-transform">
+                    <img src="/Rabia_Logo.jpg" alt="لوگوی کافه رابیا" className="w-full h-full object-contain" />
+                  </div>
                 </div>
 
                 <div className="mt-4 p-2 space-y-2">

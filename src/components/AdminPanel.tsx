@@ -77,7 +77,10 @@ import {
   initSupabaseRealtimeSync,
   syncAllWithSupabase,
   exportFullDatabaseBackup,
-  importFullDatabaseBackup
+  importFullDatabaseBackup,
+  clearAllOrders,
+  clearAllUsers,
+  clearAllDatabaseData
 } from '../lib/database';
 import { getSupabaseConfig, saveSupabaseConfig, SUPABASE_SQL_SCHEMA, getSupabaseClient, testSupabaseConnection, isValidSupabaseUrl } from '../lib/supabase';
 
@@ -143,6 +146,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [isImporting, setIsImporting] = useState(false);
   const [importResultMsg, setImportResultMsg] = useState<{ success: boolean; text: string } | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+
+  // Database Purge / Clear states (Orders, Users, All with confirmation dialog)
+  const [purgeTarget, setPurgeTarget] = useState<'orders' | 'users' | 'all' | null>(null);
+  const [isPurging, setIsPurging] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showPurgeMenu, setShowPurgeMenu] = useState(false);
+
+  // Execute purge after confirmation ("بله")
+  const handleConfirmPurge = async () => {
+    if (!purgeTarget) return;
+    setIsPurging(true);
+    setPurgeResult(null);
+
+    try {
+      let res: { success: boolean; message: string } = { success: false, message: '' };
+
+      if (purgeTarget === 'orders') {
+        res = await clearAllOrders();
+      } else if (purgeTarget === 'users') {
+        res = await clearAllUsers();
+      } else if (purgeTarget === 'all') {
+        res = await clearAllDatabaseData();
+        if (onMenuUpdated) {
+          onMenuUpdated();
+        }
+      }
+
+      setPurgeResult(res);
+      refreshData();
+      setSelectedUser(null);
+
+      if (res.success) {
+        setTimeout(() => {
+          setPurgeTarget(null);
+          setPurgeResult(null);
+        }, 1200);
+      }
+    } catch (err: any) {
+      setPurgeResult({ success: false, message: err?.message || 'خطا در عملیات پاکسازی.' });
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   // New incoming order real-time alert banner
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
@@ -440,8 +486,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
         <div className="h-14 sm:h-16 px-3 sm:px-6 bg-[#1A1513] border-b border-[#C87D55]/30 flex items-center justify-between gap-2 shrink-0">
           {/* Brand & Panel Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl copper-gradient flex items-center justify-center text-white font-black text-sm sm:text-base shrink-0 shadow-md">
-              R
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl overflow-hidden border border-[#C87D55]/40 bg-[#F6E3CE] flex items-center justify-center p-0.5 shrink-0 shadow-md">
+              <img src="/Rabia_Logo.jpg" alt="لوگوی کافه رابیا" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-lg font-black text-[#FDFBF7] flex items-center gap-1.5 sm:gap-2 truncate">
@@ -489,6 +535,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               <RefreshCw className={`w-3.5 h-3.5 text-[#E0946B] ${isSyncingNow ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">سینک داده‌ها</span>
             </button>
+
+            {/* Quick Purge Options Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPurgeMenu(!showPurgeMenu)}
+                title="گزینه‌های پاکسازی دیتابیس"
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 text-xs font-bold transition-all shrink-0"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">پاکسازی داده‌ها</span>
+                <span className="sm:hidden">پاکسازی</span>
+              </button>
+
+              {showPurgeMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowPurgeMenu(false)}
+                  />
+                  <div className="absolute left-0 mt-2 w-60 rounded-2xl bg-[#1C1412] border border-rose-800/60 shadow-2xl p-2.5 z-50 space-y-1.5">
+                    <div className="px-2.5 py-1 text-[11px] font-bold text-rose-400/90 border-b border-rose-900/30">
+                      عملیات پاکسازی دیتابیس
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPurgeMenu(false);
+                        setPurgeTarget('orders');
+                      }}
+                      className="w-full text-right px-3 py-2 rounded-xl text-xs font-bold text-rose-200 hover:bg-rose-900/50 flex items-center justify-between transition-all"
+                    >
+                      <span>پاکسازی تمام سفارش‌ها</span>
+                      <span className="text-[10px] text-rose-400 font-mono">({orders.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPurgeMenu(false);
+                        setPurgeTarget('users');
+                      }}
+                      className="w-full text-right px-3 py-2 rounded-xl text-xs font-bold text-rose-200 hover:bg-rose-900/50 flex items-center justify-between transition-all"
+                    >
+                      <span>پاکسازی یوزرها</span>
+                      <span className="text-[10px] text-rose-400 font-mono">({users.length})</span>
+                    </button>
+                    <div className="border-t border-rose-900/40 my-1"></div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPurgeMenu(false);
+                        setPurgeTarget('all');
+                      }}
+                      className="w-full text-right px-3 py-2.5 rounded-xl text-xs font-black text-white bg-rose-600 hover:bg-rose-500 flex items-center justify-between transition-all shadow-md"
+                    >
+                      <span>پاکسازی همه</span>
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Exit button */}
             <button
@@ -659,8 +766,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                   ))}
                 </div>
 
-                <div className="text-[11px] sm:text-xs text-[#A8988C]">
-                  نمایش {filteredOrders.length} سفارش لحظه‌ای
+                <div className="flex items-center gap-2">
+                  <div className="text-[11px] sm:text-xs text-[#A8988C]">
+                    نمایش {filteredOrders.length} سفارش لحظه‌ای
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPurgeTarget('orders')}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-950/40 hover:bg-rose-900/70 border border-rose-800/40 text-rose-300 text-xs font-bold transition-all shrink-0 shadow-sm"
+                    title="پاکسازی تمام سفارش‌های ثبت شده در سیستم"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>پاکسازی تمام سفارش‌ها</span>
+                  </button>
                 </div>
               </div>
 
@@ -814,6 +932,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
           {/* TAB 2: USER APPROVALS & USERS LIST */}
           {activeTab === 'users' && (
             <div className="space-y-6 max-w-5xl mx-auto">
+              {/* Header Bar with Clear Users Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#C87D55]/20">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-base font-black text-[#FDFBF7]">
+                    لیست و مدیریت کاربران کافه رابیا
+                  </h3>
+                  <span className="text-xs text-[#E0946B] bg-[#241E1B] px-2.5 py-0.5 rounded-full border border-[#C87D55]/30">
+                    مجموع: {users.length} کاربر
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPurgeTarget('users')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/80 border border-rose-800/50 text-rose-300 text-xs font-bold transition-all shrink-0 self-start sm:self-auto shadow-sm"
+                  title="پاکسازی تمام کاربران ثبت شده"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>پاکسازی یوزرها</span>
+                </button>
+              </div>
+
               {/* Pending Approvals Section */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -1738,6 +1878,89 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 </div>
               </div>
 
+              {/* PURGE / DANGER ZONE (عملیات پاکسازی داده‌ها) */}
+              <div className="p-5 rounded-2xl bg-[#1C1412] border border-rose-900/50 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-900/40 pb-3">
+                  <div>
+                    <h4 className="text-sm font-black text-rose-300 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span>عملیات پاکسازی داده‌های دیتابیس (منطقه حساس)</span>
+                    </h4>
+                    <p className="text-[11px] text-[#A8988C] mt-0.5">
+                      گزینه‌های زیر برای ریست داده‌ها یا پاکسازی دوره‌ای دیتابیس تعبیه شده‌اند. قبل از حذف، تاییدیه «بله/خیر» دریافت می‌شود.
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-rose-400 bg-rose-950/60 border border-rose-800/40 px-2.5 py-1 rounded-full font-bold self-start sm:self-auto">
+                    ⚠️ اقدامات غیرقابل بازگشت
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {/* Option 1: Clear All Orders */}
+                  <div className="p-4 rounded-xl bg-[#17110F] border border-rose-900/30 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#FDFBF7]">پاکسازی تمام سفارش‌ها</span>
+                        <span className="text-[10px] text-rose-400 font-mono">({orders.length} سفارش)</span>
+                      </div>
+                      <p className="text-[11px] text-[#8C7B71] mt-1.5 leading-relaxed">
+                        حذف تمامی سفارش‌های ثبت‌شده (جاری، آماده و تحویل‌شده) از حافظه محلی و دیتابیس ابری.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPurgeTarget('orders')}
+                      className="w-full py-2 px-3 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800/60 text-rose-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>پاکسازی تمام سفارش‌ها</span>
+                    </button>
+                  </div>
+
+                  {/* Option 2: Clear Users */}
+                  <div className="p-4 rounded-xl bg-[#17110F] border border-rose-900/30 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#FDFBF7]">پاکسازی یوزرها</span>
+                        <span className="text-[10px] text-rose-400 font-mono">({users.length} کاربر)</span>
+                      </div>
+                      <p className="text-[11px] text-[#8C7B71] mt-1.5 leading-relaxed">
+                        حذف تمامی یوزرها، حساب‌های کاربری ثبت شده، درخواست‌ها و سوابق اعتباری آن‌ها.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPurgeTarget('users')}
+                      className="w-full py-2 px-3 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800/60 text-rose-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>پاکسازی یوزرها</span>
+                    </button>
+                  </div>
+
+                  {/* Option 3: Clear All */}
+                  <div className="p-4 rounded-xl bg-[#221210] border border-rose-700/50 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-rose-300">پاکسازی همه</span>
+                        <span className="text-[10px] text-amber-300 font-bold">ریست کامل</span>
+                      </div>
+                      <p className="text-[11px] text-[#A8988C] mt-1.5 leading-relaxed">
+                        حذف تمام اطلاعات ذخیره شده در دیتابیس شامل سفارشات، یوزرها و تراکنش‌های مالی به طور کامل.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPurgeTarget('all')}
+                      className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/60"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>پاکسازی همه</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Supabase Connection Form */}
               <div className="p-5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1844,6 +2067,101 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
           )}
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL FOR PURGING DATA */}
+      {purgeTarget && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md bg-[#1C1412] border border-rose-700/60 rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 text-center relative overflow-hidden">
+            {/* Ambient background glow */}
+            <div className="absolute -top-16 -right-16 w-36 h-36 rounded-full bg-rose-600/15 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full bg-rose-600/15 blur-3xl pointer-events-none" />
+
+            {/* Warning Icon */}
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center justify-center shadow-lg">
+              <AlertTriangle className="w-8 h-8 text-rose-400 animate-pulse" />
+            </div>
+
+            {/* Title / Question */}
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-[#FDFBF7]">
+                مطمئنی که می‌خوای پاک کنی؟
+              </h3>
+              <p className="text-xs sm:text-sm text-rose-200/90 leading-relaxed px-2">
+                {purgeTarget === 'orders' && (
+                  <>
+                    آیا از حذف <strong className="text-white underline">تمام سفارش‌های ثبت شده</strong> اطمینان دارید؟ با تایید این مورد، تمامی سوابق سفارشات جاری و آرشیو شده به صورت دائمی پاک خواهند شد.
+                  </>
+                )}
+                {purgeTarget === 'users' && (
+                  <>
+                    آیا از حذف <strong className="text-white underline">تمام یوزرها و مشتریان</strong> اطمینان دارید؟ تمامی اطلاعات کاربری و سوابق اعتبارات پاک خواهند شد.
+                  </>
+                )}
+                {purgeTarget === 'all' && (
+                  <>
+                    ⚠️ هشدار: شما در حال پاکسازی <strong className="text-white underline">تمام اطلاعات ذخیره شده در دیتابیس</strong> هستید! همه سفارش‌ها، یوزرها و تراکنش‌ها به صورت کامل پاک خواهند شد.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* Feedback / Result notification */}
+            {purgeResult && (
+              <div className={`p-3.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 ${
+                purgeResult.success
+                  ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
+                  : 'bg-rose-950/80 border-rose-700 text-rose-300'
+              }`}>
+                {purgeResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                )}
+                <span>{purgeResult.message}</span>
+              </div>
+            )}
+
+            {/* Action Buttons: YES (بله) and NO (خیر) */}
+            {!purgeResult?.success && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                {/* YES BUTTON (بله) */}
+                <button
+                  type="button"
+                  onClick={handleConfirmPurge}
+                  disabled={isPurging}
+                  className="py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-sm shadow-lg shadow-rose-950/60 transition-all flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 cursor-pointer"
+                >
+                  {isPurging ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>در حال پاکسازی...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>بله</span>
+                    </>
+                  )}
+                </button>
+
+                {/* NO BUTTON (خیر) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurgeTarget(null);
+                    setPurgeResult(null);
+                  }}
+                  disabled={isPurging}
+                  className="py-3 px-4 rounded-xl bg-[#2A201A] hover:bg-[#382C25] border border-[#C87D55]/30 text-[#D8C7B8] hover:text-white font-bold text-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                  <span>خیر</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

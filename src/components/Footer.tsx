@@ -4,9 +4,10 @@ import { Coffee, MapPin, Phone, Clock, Instagram, Send, Heart, Sparkles } from '
 interface FooterProps {
   onOpenAdminLogin: () => void;
   onOpenCreditModal: () => void;
+  onOpenTracking?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditModal }) => {
+export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditModal, onOpenTracking }) => {
   return (
     <footer className="bg-[#0E0C0B] border-t border-[#C87D55]/20 pt-14 pb-8 text-[#D4C4B7]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -14,8 +15,8 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditMo
           {/* Col 1: Brand Info */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl copper-gradient flex items-center justify-center text-white shadow-md">
-                <Coffee className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-[#C87D55]/40 bg-[#F6E3CE] flex items-center justify-center p-0.5 shadow-md">
+                <img src="/Rabia_Logo.jpg" alt="لوگوی کافه رابیا" className="w-full h-full object-contain" />
               </div>
               <h3 className="text-xl font-black text-[#FDFBF7]">کافه رابیا (Rabia)</h3>
             </div>
@@ -56,6 +57,15 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditMo
               >
                 آشنایی با سیستم اعتبار حساب رابیا
               </button>
+              {onOpenTracking && (
+                <button
+                  onClick={onOpenTracking}
+                  className="text-[#F5D3C1] hover:text-white hover:underline font-bold block pt-1 flex items-center gap-1.5"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  پیگیری آنلاین وضعیت سفارش
+                </button>
+              )}
             </div>
           </div>
 
