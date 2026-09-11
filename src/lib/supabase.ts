@@ -40,7 +40,7 @@ export function getSupabaseConfig(): { url: string; key: string } {
 
   // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
   if (savedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
-    savedUrl = savedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+    savedUrl = savedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
   }
 
   // If saved URL is invalid or malformed, purge it from storage safely
@@ -66,7 +66,7 @@ export function saveSupabaseConfig(url: string, key: string) {
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
     if (trimmedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
-      trimmedUrl = trimmedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+      trimmedUrl = trimmedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
     }
 
     if (trimmedUrl && isValidSupabaseUrl(trimmedUrl)) {
@@ -110,7 +110,7 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
     if (testUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
-      testUrl = testUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+      testUrl = testUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
     }
 
     if (!testUrl || !testKey) {
