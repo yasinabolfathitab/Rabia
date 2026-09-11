@@ -40,6 +40,7 @@ export function getSupabaseConfig(): { url: string; key: string } {
 
   // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
   if (savedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+    savedUrl = savedUrl.replace('https://csoqhdjlnpxlhejfbcai.supabase.co', 'https://supabase-proxy.yasinabolfathi.workers.dev');
     savedUrl = savedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
   }
 
@@ -66,6 +67,7 @@ export function saveSupabaseConfig(url: string, key: string) {
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
     if (trimmedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+      trimmedUrl = trimmedUrl.replace('https://csoqhdjlnpxlhejfbcai.supabase.co', 'https://supabase-proxy.yasinabolfathi.workers.dev');
       trimmedUrl = trimmedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
     }
 
@@ -110,6 +112,7 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
     if (testUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+      testUrl = testUrl.replace('https://csoqhdjlnpxlhejfbcai.supabase.co', 'https://supabase-proxy.yasinabolfathi.workers.dev');
       testUrl = testUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
     }
 
