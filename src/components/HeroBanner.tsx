@@ -29,7 +29,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
 
             <p className="text-sm sm:text-base text-[#D4C4B7] leading-relaxed max-w-xl font-light">
               منوی دست‌چین شده از بهترین خاستگاه‌های قهوه جهان، نوشیدنی‌های بار سرد، 
-              شیرینی‌های تازه و کراسان‌های فرانسوی در محیطی آرام با ترکیب معماری مسی و کرم.
+              شیرینی‌های تازه و کراسان‌های فرانسوی در محیطی آرام.
             </p>
 
             {/* Features pills */}
