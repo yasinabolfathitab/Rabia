@@ -13,7 +13,7 @@ import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { Footer } from './components/Footer';
 
 import { User, MenuItem, CartItem, Order } from './types';
-import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync, parseIsAvailable, forceUpdateSupabaseMenu } from './lib/database';
+import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync, parseIsAvailable } from './lib/database';
 import { ShoppingBag, ArrowUp } from 'lucide-react';
 
 export default function App() {
@@ -93,7 +93,6 @@ export default function App() {
   // Initialize Supabase realtime synchronization on mount
   useEffect(() => {
     initSupabaseRealtimeSync();
-    forceUpdateSupabaseMenu();
   }, []);
 
   // Save cart changes

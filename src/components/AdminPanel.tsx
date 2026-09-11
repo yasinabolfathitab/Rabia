@@ -84,6 +84,20 @@ import {
 } from '../lib/database';
 import { getSupabaseConfig, saveSupabaseConfig, SUPABASE_SQL_SCHEMA, getSupabaseClient, testSupabaseConnection, isValidSupabaseUrl } from '../lib/supabase';
 
+const CATEGORY_LABELS: Record<string, string> = {
+  espresso_milk: 'اسپرسو و شیر',
+  hot_bar: 'هات بار',
+  tea_bar: 'تی بار',
+  ice_coffee: 'آیس کافی',
+  mocktail_bar: 'ماکتیل بار',
+  shake_smoothie: 'شیک و اسموتی',
+  signature: 'سیگنچر',
+  antioxidant_bar: 'آنتی اکسیدان بار',
+  affogato_bar: 'آفوگاتو بار',
+  cakes_desserts: 'کیک و دسر',
+  refresher: 'رفرشر',
+};
+
 interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -344,9 +358,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   };
 
   // Handle Menu Save
-  const handleSaveMenuItem = (e: React.FormEvent) => {
+  const handleSaveMenuItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.name || !editingItem.price) return;
+    if (!editingItem.name || editingItem.price === undefined || editingItem.price === null) return;
 
     const ingArray = ingredientsText
       .split('،')
@@ -358,7 +372,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
       name: editingItem.name,
       nameEn: editingItem.nameEn || '',
       category: editingItem.category || 'espresso_milk',
-      price: Number(editingItem.price),
+      price: Number(editingItem.price) >= 0 ? Number(editingItem.price) : 0,
       description: editingItem.description || '',
       ingredients: ingArray.length > 0 ? ingArray : editingItem.ingredients || [],
       image: editingItem.image || 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&w=800&q=80',
@@ -366,7 +380,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
       isFeatured: editingItem.isFeatured || false,
     };
 
-    saveMenuItem(itemToSave);
+    await saveMenuItem(itemToSave);
     setIsEditingItem(false);
     refreshData();
     onMenuUpdated?.();
@@ -1261,26 +1275,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 {menuItems.map((it) => (
                   <div
                     key={it.id}
-                    className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 flex flex-col justify-between gap-3"
+                    className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 flex flex-col justify-between gap-3 shadow-md"
                   >
-                    <div className="flex gap-3">
-                      <img
-                        src={it.image}
-                        alt={it.name}
-                        className="w-16 h-16 rounded-xl object-cover border border-[#C87D55]/30 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
-                            {it.name}
-                          </h4>
-                          <span className="text-xs font-black text-[#E0946B]">
-                            {it.price.toLocaleString('fa-IR')} ت
-                          </span>
+                    <div className="flex flex-col min-[380px]:flex-row gap-3.5 items-center min-[380px]:items-start">
+                      <div className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden border border-[#C87D55]/30 shrink-0 shadow-md bg-[#241E1B]">
+                        <img
+                          src={it.image}
+                          alt={it.name}
+                          width={128}
+                          height={128}
+                          className="w-[128px] h-[128px] object-cover"
+                        />
+                        {!parseIsAvailable(it.isAvailable) && (
+                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1">
+                            <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 px-2 py-0.5 rounded border border-rose-800">
+                              اتمام موجودی
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col justify-between w-full h-full">
+                        <div>
+                          <div className="flex items-start justify-between gap-1">
+                            <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
+                              {it.name}
+                            </h4>
+                            <span className="text-xs font-black text-[#E0946B] shrink-0">
+                              {it.price.toLocaleString('fa-IR')} ت
+                            </span>
+                          </div>
+                          {it.nameEn && (
+                            <p className="text-[10px] text-[#A8988C]/80 truncate">{it.nameEn}</p>
+                          )}
+                          <p className="text-[11px] text-[#A8988C] line-clamp-2 mt-1">
+                            {it.description}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-[#A8988C] line-clamp-2 mt-1">
-                          {it.description}
-                        </p>
+                        <div className="mt-2 text-[10px] text-[#C4B3A5]/60">
+                          دسته‌بندی: {CATEGORY_LABELS[it.category] || it.category}
+                        </div>
                       </div>
                     </div>
 
@@ -1396,8 +1429,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           <input
                             type="number"
                             required
-                            value={editingItem.price || ''}
-                            onChange={(e) => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
+                            min="0"
+                            value={editingItem.price !== undefined && editingItem.price !== null ? editingItem.price : ''}
+                            onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                             className="w-full bg-[#221B17] border border-[#C87D55]/30 rounded-xl p-2 text-[#FDFBF7] focus:outline-none"
                           />
                         </div>
@@ -1448,8 +1482,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                         </div>
 
                         {editingItem.image && (
-                          <div className="w-20 h-20 rounded-xl overflow-hidden border border-[#C87D55]/40 mt-1">
-                            <img src={editingItem.image} alt="پیش‌نمایش" className="w-full h-full object-cover" />
+                          <div className="w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden border border-[#C87D55]/40 mt-2 shadow-md bg-[#241E1B]">
+                            <img
+                              src={editingItem.image}
+                              alt="پیش‌نمایش"
+                              width={128}
+                              height={128}
+                              className="w-[128px] h-[128px] object-cover"
+                            />
                           </div>
                         )}
                       </div>

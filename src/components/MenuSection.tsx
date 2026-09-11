@@ -148,7 +148,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
       )}
 
       {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {filteredItems.map((item) => {
           const qty = getItemQuantity(item.id);
           const isOutOfStock = !parseIsAvailable(item.isAvailable);
@@ -156,127 +156,126 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
           return (
             <div
               key={item.id}
-              className={`relative rounded-2xl bg-gradient-to-b from-[#1C1714] to-[#161210] border transition-all duration-300 flex flex-col justify-between overflow-hidden group shadow-lg ${
+              className={`relative rounded-2xl bg-gradient-to-b from-[#1C1714] to-[#161210] border transition-all duration-300 flex flex-col min-[380px]:flex-row items-center min-[380px]:items-stretch p-3.5 sm:p-4 gap-3.5 sm:gap-4 overflow-hidden group shadow-lg ${
                 isOutOfStock
                   ? 'border-rose-900/40 opacity-85'
-                  : 'border-[#C87D55]/20 hover:border-[#C87D55]/60 hover:-translate-y-1 hover:shadow-2xl hover:shadow-[#C87D55]/10'
+                  : 'border-[#C87D55]/20 hover:border-[#C87D55]/60 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-[#C87D55]/10'
               }`}
             >
-              <div>
-                {/* Item Image with Overlay */}
-                <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-[#241E1B]">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    loading="lazy"
-                    className={`w-full h-full object-cover transition-transform duration-700 ${
-                      isOutOfStock ? 'grayscale contrast-75 brightness-75' : 'group-hover:scale-105'
-                    }`}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#161210] via-transparent to-transparent"></div>
+              {/* 128x128 Item Image Container with Badges */}
+              <div className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden bg-[#241E1B] shrink-0 border border-[#C87D55]/25 shadow-md group-hover:border-[#C87D55]/60 transition-colors">
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  loading="lazy"
+                  width={128}
+                  height={128}
+                  className={`w-[128px] h-[128px] object-cover transition-transform duration-500 ${
+                    isOutOfStock ? 'grayscale contrast-75 brightness-75' : 'group-hover:scale-105'
+                  }`}
+                />
 
-                  {/* Out of Stock Central Image Overlay */}
-                  {isOutOfStock && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-3 text-center pointer-events-none">
-                      <div className="px-3.5 py-1.5 rounded-xl bg-rose-600/95 text-white font-black text-xs shadow-xl flex items-center gap-1.5 border border-rose-400">
-                        <AlertCircle className="w-4 h-4 text-white shrink-0" />
-                        <span>اتمام موجودی</span>
-                      </div>
-                      <span className="text-[11px] text-neutral-200 mt-1.5 font-medium">سفارش این آیتم موقتاً غیرفعال است</span>
-                    </div>
-                  )}
-
-                  {/* Badges */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-                    {item.isFeatured && (
-                      <span className="px-2.5 py-1 rounded-full bg-[#C87D55]/90 text-white text-[10px] font-black backdrop-blur-sm shadow-md">
-                        پیشنهاد باریستا
-                      </span>
-                    )}
-                    {isOutOfStock && (
-                      <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white border border-rose-400 text-[10px] font-black shadow-md flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                        اتمام موجودی
-                      </span>
-                    )}
-                  </div>
-
-                  {/* English Name if available */}
-                  {item.nameEn && (
-                    <div className="absolute bottom-2 right-3 text-[10px] font-light text-[#C4B3A5]/80 tracking-wider">
-                      {item.nameEn}
-                    </div>
+                {/* Badges on Image */}
+                <div className="absolute top-2 right-2 flex flex-col gap-1 z-10 pointer-events-none">
+                  {item.isFeatured && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#C87D55]/95 text-white text-[9px] font-black backdrop-blur-sm shadow-md">
+                      ویژه
+                    </span>
                   )}
                 </div>
 
-                {/* Content */}
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="text-base sm:text-lg font-black text-[#FDFBF7] group-hover:text-[#F5D3C1] transition-colors">
-                      {item.name}
-                    </h3>
+                {/* Out of Stock Overlay on Image */}
+                {isOutOfStock && (
+                  <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center pointer-events-none rounded-2xl">
+                    <div className="px-2 py-1 rounded-lg bg-rose-600/95 text-white font-black text-[10px] shadow-xl flex items-center gap-1 border border-rose-400">
+                      <AlertCircle className="w-3 h-3 text-white shrink-0" />
+                      <span>اتمام موجودی</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Card Details & Actions */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between w-full">
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="min-w-0">
+                      <h3 className="text-sm sm:text-base font-black text-[#FDFBF7] group-hover:text-[#F5D3C1] transition-colors line-clamp-1">
+                        {item.name}
+                      </h3>
+                      {item.nameEn && (
+                        <p className="text-[10px] text-[#A8988C]/80 font-light truncate">
+                          {item.nameEn}
+                        </p>
+                      )}
+                    </div>
                     <div className="text-left shrink-0">
-                      <span className="text-base sm:text-lg font-black text-[#E0946B]">
+                      <span className="text-sm sm:text-base font-black text-[#E0946B]">
                         {item.price.toLocaleString('fa-IR')}
                       </span>
-                      <span className="text-[10px] text-[#A8988C] mr-1">تومان</span>
+                      <span className="text-[9px] text-[#A8988C] mr-1">تومان</span>
                     </div>
                   </div>
 
-                  <p className="text-xs text-[#B8A698] font-light line-clamp-2 leading-relaxed mb-3">
+                  <p className="text-xs text-[#B8A698] font-light line-clamp-2 leading-relaxed mb-2">
                     {item.description}
                   </p>
 
-                  {/* Ingredients chips */}
+                  {/* Ingredients Chips */}
                   {item.ingredients && item.ingredients.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {item.ingredients.map((ing, i) => (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {item.ingredients.slice(0, 3).map((ing, i) => (
                         <span
                           key={i}
-                          className="text-[10px] px-2 py-0.5 rounded-md bg-[#241E1B] text-[#D8C7B8] border border-[#C87D55]/20"
+                          className="text-[9px] px-1.5 py-0.5 rounded-md bg-[#241E1B] text-[#D8C7B8] border border-[#C87D55]/20"
                         >
                           {ing}
                         </span>
                       ))}
+                      {item.ingredients.length > 3 && (
+                        <span className="text-[9px] px-1 py-0.5 text-[#A8988C]">
+                          +{item.ingredients.length - 3}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Bottom Card Action */}
-              <div className="p-4 sm:p-5 pt-0 mt-auto">
-                {isOutOfStock ? (
-                  <div className="w-full py-2.5 px-3 rounded-xl bg-rose-950/50 text-rose-300 text-xs font-bold text-center flex items-center justify-center gap-1.5 border border-rose-800/80 shadow-sm">
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>اتمام موجودی (امکان سفارش نیست)</span>
-                  </div>
-                ) : qty > 0 ? (
-                  <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/40 rounded-xl p-1.5">
+                {/* Bottom Action Area */}
+                <div className="mt-1 pt-1 border-t border-[#C87D55]/10">
+                  {isOutOfStock ? (
+                    <div className="w-full py-1.5 px-2 rounded-xl bg-rose-950/40 text-rose-300 text-[11px] font-bold text-center flex items-center justify-center gap-1.5 border border-rose-800/60 shadow-sm">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>اتمام موجودی</span>
+                    </div>
+                  ) : qty > 0 ? (
+                    <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/40 rounded-xl p-1">
+                      <button
+                        onClick={() => onUpdateCartQuantity(item.id, 1)}
+                        className="w-7 h-7 rounded-lg copper-gradient text-white flex items-center justify-center font-bold hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-black text-[#FDFBF7] px-2">
+                        {qty} عدد
+                      </span>
+                      <button
+                        onClick={() => onUpdateCartQuantity(item.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-[#2F2723] text-[#E0946B] hover:bg-[#3D322D] flex items-center justify-center font-bold transition-all cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      onClick={() => onUpdateCartQuantity(item.id, 1)}
-                      className="w-8 h-8 rounded-lg copper-gradient text-white flex items-center justify-center font-bold hover:scale-105 active:scale-95 transition-all shadow-sm"
+                      onClick={() => onAddToCart(item)}
+                      className="w-full py-2 px-3 rounded-xl bg-[#241E1B] hover:bg-gradient-to-r hover:from-[#C87D55] hover:to-[#A85B35] text-[#FDFBF7] hover:text-white border border-[#C87D55]/30 hover:border-transparent text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5 text-[#E0946B] group-hover:text-white" />
+                      <span>افزودن به سبد سفارش</span>
                     </button>
-                    <span className="text-sm font-black text-[#FDFBF7] px-3">
-                      {qty} عدد
-                    </span>
-                    <button
-                      onClick={() => onUpdateCartQuantity(item.id, -1)}
-                      className="w-8 h-8 rounded-lg bg-[#2F2723] text-[#E0946B] hover:bg-[#3D322D] flex items-center justify-center font-bold transition-all"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => onAddToCart(item)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#241E1B] hover:bg-gradient-to-r hover:from-[#C87D55] hover:to-[#A85B35] text-[#FDFBF7] hover:text-white border border-[#C87D55]/30 hover:border-transparent text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 shadow-sm"
-                  >
-                    <Plus className="w-4 h-4 text-[#E0946B] group-hover:text-white" />
-                    <span>افزودن به سبد سفارش</span>
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           );

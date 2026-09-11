@@ -30,12 +30,30 @@ if (typeof window !== 'undefined') {
       localStorage.setItem(USERS_KEY, JSON.stringify([]));
       localStorage.setItem(ORDERS_KEY, JSON.stringify([]));
       localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([]));
-      localStorage.removeItem(MENU_KEY); // Force reload of new initial menu
       localStorage.setItem(DEPLOY_INIT_RESET_KEY, 'true');
     }
   } catch (e) {
     console.warn('Init deploy clean error:', e);
   }
+}
+
+// Stable menu order mapping based on initial items
+const INITIAL_ORDER_MAP = new Map<string, number>();
+INITIAL_MENU_ITEMS.forEach((item, index) => {
+  INITIAL_ORDER_MAP.set(item.id, index);
+});
+
+export function sortMenuItemsStably(items: MenuItem[]): MenuItem[] {
+  return [...items].sort((a, b) => {
+    const orderA = INITIAL_ORDER_MAP.has(a.id)
+      ? INITIAL_ORDER_MAP.get(a.id)!
+      : 10000 + (parseInt(a.id.replace(/\D/g, ''), 10) || 0);
+    const orderB = INITIAL_ORDER_MAP.has(b.id)
+      ? INITIAL_ORDER_MAP.get(b.id)!
+      : 10000 + (parseInt(b.id.replace(/\D/g, ''), 10) || 0);
+    if (orderA !== orderB) return orderA - orderB;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 // Helper to notify listeners
@@ -82,14 +100,71 @@ export function parseIsAvailable(val: any): boolean {
 let isRealtimeSubscribed = false;
 let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
+export async function syncOrdersAndUsersWithSupabase() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    // 1. Orders
+    const { data: dbOrders, error: ordErr } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!ordErr && dbOrders && dbOrders.length > 0) {
+      const mappedOrders: Order[] = dbOrders.map((raw: any) => ({
+        id: raw.id,
+        orderNumber: raw.order_number,
+        userId: raw.user_id || undefined,
+        userName: raw.user_name,
+        userPhone: raw.user_phone,
+        orderType: raw.order_type,
+        address: raw.address || undefined,
+        tableNumber: raw.table_number || undefined,
+        items: typeof raw.items === 'string' ? JSON.parse(raw.items) : raw.items,
+        totalAmount: Number(raw.total_amount),
+        paymentMethod: raw.payment_method,
+        status: raw.status,
+        createdAt: raw.created_at,
+        notes: raw.notes || undefined,
+      }));
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(mappedOrders));
+      emitRealtimeEvent('order_status_updated');
+    }
+
+    // 2. Users
+    const { data: dbUsers, error: uErr } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!uErr && dbUsers && dbUsers.length > 0) {
+      const mappedUsers: User[] = dbUsers.map((raw: any) => ({
+        id: raw.id,
+        name: raw.name,
+        phone: raw.phone,
+        password: raw.password,
+        address: raw.address || '',
+        rabiaCredit: Number(raw.rabia_credit || 0),
+        status: raw.status,
+        createdAt: raw.created_at,
+      }));
+      localStorage.setItem(USERS_KEY, JSON.stringify(mappedUsers));
+      emitRealtimeEvent('user_updated');
+    }
+  } catch (err) {
+    console.warn('Sync orders/users with Supabase failed:', err);
+  }
+}
+
 export async function initSupabaseRealtimeSync() {
   const supabase = getSupabaseClient();
   if (!supabase) return;
 
-  // Set up 4-second backup polling loop so even without websockets or on network sleep, orders refresh
+  // Set up 4-second backup polling loop strictly for orders & users so orders refresh without touching menu positions
   if (!pollIntervalId && typeof window !== 'undefined') {
     pollIntervalId = setInterval(() => {
-      syncAllWithSupabase();
+      syncOrdersAndUsersWithSupabase();
     }, 4000);
   }
 
@@ -191,7 +266,7 @@ export async function initSupabaseRealtimeSync() {
       )
       .subscribe();
 
-    // 3. Subscribe to Menu changes
+    // 3. Subscribe to Menu changes (Realtime, with guaranteed stable ordering)
     supabase
       .channel('rabia_menu_realtime_ch')
       .on(
@@ -201,26 +276,38 @@ export async function initSupabaseRealtimeSync() {
           const items = getMenuItems();
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const raw = payload.new;
+            const incomingPrice = Number(raw.price);
+            const idx = items.findIndex((i) => i.id === raw.id);
+            
+            // Never overwrite non-zero local price with 0
+            const existingLocalPrice = idx >= 0 ? items[idx].price : 0;
+            const finalPrice = incomingPrice > 0 ? incomingPrice : (existingLocalPrice > 0 ? existingLocalPrice : 0);
+
             const item: MenuItem = {
               id: raw.id,
               name: raw.name,
               nameEn: raw.name_en || '',
               category: raw.category,
-              price: Number(raw.price),
+              price: finalPrice,
               description: raw.description || '',
               ingredients: raw.ingredients || [],
               image: raw.image || '',
               isAvailable: parseIsAvailable(raw.is_available),
               isFeatured: raw.is_featured,
             };
-            const idx = items.findIndex((i) => i.id === item.id);
-            if (idx >= 0) items[idx] = item;
-            else items.unshift(item);
-            localStorage.setItem(MENU_KEY, JSON.stringify(items));
+
+            if (idx >= 0) {
+              items[idx] = item;
+            } else {
+              items.push(item);
+            }
+            const sorted = sortMenuItemsStably(items);
+            localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
             emitRealtimeEvent('menu_updated', item);
           } else if (payload.eventType === 'DELETE') {
             const updated = items.filter((i) => i.id !== payload.old.id);
-            localStorage.setItem(MENU_KEY, JSON.stringify(updated));
+            const sorted = sortMenuItemsStably(updated);
+            localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
             emitRealtimeEvent('menu_updated', { id: payload.old.id, deleted: true });
           }
         }
@@ -237,78 +324,64 @@ export async function syncAllWithSupabase() {
   if (!supabase) return;
 
   try {
-    // 1. Orders
-    const { data: dbOrders, error: ordErr } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+    await syncOrdersAndUsersWithSupabase();
 
-    if (!ordErr && dbOrders && dbOrders.length > 0) {
-      const mappedOrders: Order[] = dbOrders.map((raw: any) => ({
-        id: raw.id,
-        orderNumber: raw.order_number,
-        userId: raw.user_id || undefined,
-        userName: raw.user_name,
-        userPhone: raw.user_phone,
-        orderType: raw.order_type,
-        address: raw.address || undefined,
-        tableNumber: raw.table_number || undefined,
-        items: typeof raw.items === 'string' ? JSON.parse(raw.items) : raw.items,
-        totalAmount: Number(raw.total_amount),
-        paymentMethod: raw.payment_method,
-        status: raw.status,
-        createdAt: raw.created_at,
-        notes: raw.notes || undefined,
-      }));
-      localStorage.setItem(ORDERS_KEY, JSON.stringify(mappedOrders));
-      emitRealtimeEvent('order_status_updated');
-    }
-
-    // 2. Users
-    const { data: dbUsers, error: uErr } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!uErr && dbUsers && dbUsers.length > 0) {
-      const mappedUsers: User[] = dbUsers.map((raw: any) => ({
-        id: raw.id,
-        name: raw.name,
-        phone: raw.phone,
-        password: raw.password,
-        address: raw.address || '',
-        rabiaCredit: Number(raw.rabia_credit || 0),
-        status: raw.status,
-        createdAt: raw.created_at,
-      }));
-      localStorage.setItem(USERS_KEY, JSON.stringify(mappedUsers));
-      emitRealtimeEvent('user_updated');
-    }
-
-    // 3. Menu items
+    // 3. Menu items (Stably merged to prevent price wipes and position jumping)
     const { data: dbMenu, error: mErr } = await supabase
       .from('menu_items')
-      .select('*')
-      .order('created_at', { ascending: true });
+      .select('*');
 
     if (!mErr && dbMenu) {
       if (dbMenu.length > 0) {
-        const mappedMenu: MenuItem[] = dbMenu.map((raw: any) => ({
-          id: raw.id,
-          name: raw.name,
-          nameEn: raw.name_en || '',
-          category: raw.category,
-          price: Number(raw.price),
-          description: raw.description || '',
-          ingredients: raw.ingredients || [],
-          image: raw.image || '',
-          isAvailable: parseIsAvailable(raw.is_available),
-          isFeatured: raw.is_featured,
-        }));
-        localStorage.setItem(MENU_KEY, JSON.stringify(mappedMenu));
+        const localMenu = getMenuItems();
+        const dbMap = new Map<string, any>();
+        dbMenu.forEach((raw: any) => {
+          dbMap.set(raw.id, raw);
+        });
+
+        // Merge Supabase data into local stably-ordered items without overwriting non-zero prices with 0
+        const merged: MenuItem[] = localMenu.map((localItem) => {
+          const remote = dbMap.get(localItem.id);
+          if (!remote) return localItem;
+          const remotePrice = Number(remote.price);
+          return {
+            ...localItem,
+            name: remote.name || localItem.name,
+            nameEn: remote.name_en !== undefined && remote.name_en !== null ? remote.name_en : localItem.nameEn,
+            category: remote.category || localItem.category,
+            // Keep existing non-zero price if remote is 0 (from old seed)
+            price: remotePrice > 0 ? remotePrice : (localItem.price > 0 ? localItem.price : 0),
+            description: remote.description !== undefined && remote.description !== null ? remote.description : localItem.description,
+            ingredients: remote.ingredients || localItem.ingredients,
+            image: remote.image || localItem.image,
+            isAvailable: parseIsAvailable(remote.is_available),
+            isFeatured: remote.is_featured !== undefined ? remote.is_featured : localItem.isFeatured,
+          };
+        });
+
+        // Add any newly created items that exist in DB but not in localMenu
+        dbMenu.forEach((remote: any) => {
+          if (!localMenu.some((l) => l.id === remote.id)) {
+            merged.push({
+              id: remote.id,
+              name: remote.name,
+              nameEn: remote.name_en || '',
+              category: remote.category,
+              price: Number(remote.price) || 0,
+              description: remote.description || '',
+              ingredients: remote.ingredients || [],
+              image: remote.image || '',
+              isAvailable: parseIsAvailable(remote.is_available),
+              isFeatured: remote.is_featured,
+            });
+          }
+        });
+
+        const stablySorted = sortMenuItemsStably(merged);
+        localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
         emitRealtimeEvent('menu_updated');
       } else {
-        // Table exists in Supabase but is empty: automatically seed current menu so all devices have it!
+        // Table exists in Supabase but is empty: seed current menu
         const localMenu = getMenuItems();
         if (localMenu && localMenu.length > 0) {
           const payload = localMenu.map((m) => ({
@@ -339,26 +412,29 @@ export function getMenuItems(): MenuItem[] {
     if (data) {
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((item: MenuItem) => ({
+        const cleaned = parsed.map((item: MenuItem) => ({
           ...item,
           isAvailable: parseIsAvailable(item.isAvailable),
         }));
+        return sortMenuItemsStably(cleaned);
       }
     }
     const cleanInitial = INITIAL_MENU_ITEMS.map((item) => ({
       ...item,
       isAvailable: parseIsAvailable(item.isAvailable),
     }));
-    localStorage.setItem(MENU_KEY, JSON.stringify(cleanInitial));
-    return cleanInitial;
+    const sorted = sortMenuItemsStably(cleanInitial);
+    localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
+    return sorted;
   } catch {
-    return INITIAL_MENU_ITEMS;
+    return sortMenuItemsStably(INITIAL_MENU_ITEMS);
   }
 }
 
-export function saveMenuItem(item: MenuItem): MenuItem {
+export async function saveMenuItem(item: MenuItem): Promise<MenuItem> {
   const cleanItem: MenuItem = {
     ...item,
+    price: Number(item.price) >= 0 ? Number(item.price) : 0,
     isAvailable: parseIsAvailable(item.isAvailable),
   };
   const items = getMenuItems();
@@ -366,30 +442,33 @@ export function saveMenuItem(item: MenuItem): MenuItem {
   if (index >= 0) {
     items[index] = cleanItem;
   } else {
-    items.unshift(cleanItem);
+    items.push(cleanItem);
   }
-  localStorage.setItem(MENU_KEY, JSON.stringify(items));
+  const stablySorted = sortMenuItemsStably(items);
+  localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
   emitRealtimeEvent('menu_updated', cleanItem);
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    supabase
-      .from('menu_items')
-      .upsert({
-        id: cleanItem.id,
-        name: cleanItem.name,
-        name_en: cleanItem.nameEn || null,
-        category: cleanItem.category,
-        price: cleanItem.price,
-        description: cleanItem.description,
-        ingredients: cleanItem.ingredients || [],
-        image: cleanItem.image || null,
-        is_available: cleanItem.isAvailable,
-        is_featured: cleanItem.isFeatured || false,
-      })
-      .then(({ error }) => {
-        if (error) console.error('Supabase menu upsert error:', error);
-      });
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .upsert({
+          id: cleanItem.id,
+          name: cleanItem.name,
+          name_en: cleanItem.nameEn || null,
+          category: cleanItem.category,
+          price: cleanItem.price,
+          description: cleanItem.description,
+          ingredients: cleanItem.ingredients || [],
+          image: cleanItem.image || null,
+          is_available: cleanItem.isAvailable,
+          is_featured: cleanItem.isFeatured || false,
+        });
+      if (error) console.error('Supabase menu upsert error:', error);
+    } catch (err) {
+      console.error('Supabase saveMenuItem error:', err);
+    }
   }
 
   return cleanItem;
@@ -397,38 +476,44 @@ export function saveMenuItem(item: MenuItem): MenuItem {
 
 export async function toggleMenuItemStock(itemId: string): Promise<boolean> {
   const items = getMenuItems();
-  const item = items.find((i) => i.id === itemId);
-  if (item) {
+  const itemIndex = items.findIndex((i) => i.id === itemId);
+  if (itemIndex >= 0) {
+    const item = items[itemIndex];
     const currentVal = parseIsAvailable(item.isAvailable);
     const newStatus = !currentVal;
     item.isAvailable = newStatus;
-    localStorage.setItem(MENU_KEY, JSON.stringify(items));
+    items[itemIndex] = item;
+    
+    // Stably preserve menu order without jumping
+    const stablySorted = sortMenuItemsStably(items);
+    localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
     emitRealtimeEvent('menu_updated', item);
 
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        // First try targeted column update to avoid touching other properties
         const { error } = await supabase
           .from('menu_items')
-          .upsert({
-            id: item.id,
-            name: item.name,
-            name_en: item.nameEn || null,
-            category: item.category,
-            price: item.price,
-            description: item.description,
-            ingredients: item.ingredients || [],
-            image: item.image || null,
-            is_available: newStatus,
-            is_featured: item.isFeatured || false,
-          });
+          .update({ is_available: newStatus })
+          .eq('id', itemId);
 
         if (error) {
-          console.warn('Supabase upsert menu stock error, trying update fallback:', error);
+          console.warn('Supabase update menu stock error, trying upsert fallback:', error);
           await supabase
             .from('menu_items')
-            .update({ is_available: newStatus })
-            .eq('id', itemId);
+            .upsert({
+              id: item.id,
+              name: item.name,
+              name_en: item.nameEn || null,
+              category: item.category,
+              price: item.price,
+              description: item.description,
+              ingredients: item.ingredients || [],
+              image: item.image || null,
+              is_available: newStatus,
+              is_featured: item.isFeatured || false,
+            });
         }
       } catch (err) {
         console.error('Supabase toggle stock error:', err);
@@ -442,7 +527,8 @@ export async function toggleMenuItemStock(itemId: string): Promise<boolean> {
 
 export function deleteMenuItem(itemId: string) {
   const items = getMenuItems().filter((i) => i.id !== itemId);
-  localStorage.setItem(MENU_KEY, JSON.stringify(items));
+  const stablySorted = sortMenuItemsStably(items);
+  localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
   emitRealtimeEvent('menu_updated', { id: itemId, deleted: true });
 
   const supabase = getSupabaseClient();
@@ -1289,7 +1375,7 @@ export async function clearAllDatabaseData(): Promise<{ success: boolean; messag
     localStorage.removeItem('rabia_customer_recent_orders');
 
     // Reset menu to clean initial items
-    localStorage.setItem(MENU_KEY, JSON.stringify(INITIAL_MENU_ITEMS));
+    localStorage.setItem(MENU_KEY, JSON.stringify(sortMenuItemsStably(INITIAL_MENU_ITEMS)));
 
     // 2. Clear from Supabase if connected
     const supabase = getSupabaseClient();
@@ -1314,39 +1400,6 @@ export async function clearAllDatabaseData(): Promise<{ success: boolean; messag
 }
 
 export async function forceUpdateSupabaseMenu() {
-  const FORCE_KEY = 'rabia_force_menu_v8';
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(FORCE_KEY)) return;
-  
-  const supabase = getSupabaseClient();
-  if (!supabase) return; // If not connected, it's fine. If they connect later, they'll push local data anyway because we'll also update local.
-
-  try {
-    console.log("Force syncing new menu to Supabase...");
-    // Delete all existing items
-    await supabase.from('menu_items').delete().not('id', 'is', null);
-    
-    // Upsert the new ones
-    const payload = INITIAL_MENU_ITEMS.map((m) => ({
-      id: m.id,
-      name: m.name,
-      name_en: m.nameEn || null,
-      category: m.category,
-      price: m.price,
-      description: m.description,
-      ingredients: m.ingredients || [],
-      image: m.image || null,
-      is_available: parseIsAvailable(m.isAvailable),
-      is_featured: m.isFeatured || false,
-    }));
-    
-    await supabase.from('menu_items').upsert(payload);
-    
-    localStorage.setItem(MENU_KEY, JSON.stringify(INITIAL_MENU_ITEMS));
-    localStorage.setItem(FORCE_KEY, 'true');
-    emitRealtimeEvent('menu_updated');
-    console.log("Force sync completed.");
-  } catch (err) {
-    console.error("Failed to force sync menu", err);
-  }
+  // Deprecated: No-op to strictly preserve custom prices and stable ordering
+  return;
 }
