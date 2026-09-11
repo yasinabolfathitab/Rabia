@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_KEY_URL = 'rabia_supabase_url';
 const STORAGE_KEY_KEY = 'rabia_supabase_key';
 
-export const DEFAULT_SUPABASE_URL = 'https://supabase-proxy.yasinabolfathi.workers.dev';
+export const DEFAULT_SUPABASE_URL = 'https://api.rabia-cafebakery.ir';
 export const DEFAULT_SUPABASE_KEY = 'sb_publishable_dQl9IpKLLuxRvpt_CXEsEw_kM3j8X7z';
 
 export function isValidSupabaseUrl(url?: string | null): boolean {
@@ -42,12 +42,7 @@ export function getSupabaseConfig(): { url: string; key: string } {
   savedKey = (savedKey || '').trim();
 
   // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
-  if (savedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
-    savedUrl = savedUrl.replace('https://csoqhdjlnpxlhejfbcai.supabase.co', DEFAULT_SUPABASE_URL);
-    savedUrl = savedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'supabase-proxy.yasinabolfathi.workers.dev');
-  }
-
-  if (savedUrl.includes('api.rabia-cafebakery.ir')) {
+  if (savedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co') || savedUrl.includes('supabase-proxy.yasinabolfathi.workers.dev')) {
     savedUrl = DEFAULT_SUPABASE_URL;
   }
 
@@ -77,7 +72,7 @@ export function saveSupabaseConfig(url: string, key: string) {
     const trimmedKey = (key || '').trim();
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
-    if (trimmedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co') || trimmedUrl.includes('api.rabia-cafebakery.ir')) {
+    if (trimmedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co') || trimmedUrl.includes('supabase-proxy.yasinabolfathi.workers.dev')) {
       trimmedUrl = DEFAULT_SUPABASE_URL;
     }
 
@@ -121,7 +116,7 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
     const testKey = (key || getSupabaseConfig().key || '').trim();
 
     // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
-    if (testUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co') || testUrl.includes('api.rabia-cafebakery.ir')) {
+    if (testUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co') || testUrl.includes('supabase-proxy.yasinabolfathi.workers.dev')) {
       testUrl = DEFAULT_SUPABASE_URL;
     }
 
