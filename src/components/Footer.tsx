@@ -36,8 +36,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditMo
               <span>ساعات کاری و پذیرایی</span>
             </h4>
             <div className="text-xs space-y-1.5 text-[#A8988C]">
-              <p>شنبه تا پنج‌شنبه: ۸:۰۰ صبح الی ۲۴:۰۰</p>
-              <p>جمعه‌ها و ایام تعطیل: ۹:۰۰ صبح الی ۲۴:۰۰</p>
+              <p className="font-medium text-[#FDFBF7]">ساعت کاری 8:00 _ 22:00 همه روزه</p>
               <p className="text-emerald-400 pt-1">سفارش بیرون‌بر و سالن فعال است</p>
             </div>
           </div>
@@ -49,11 +48,16 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminLogin, onOpenCreditMo
               <span>آدرس و اطلاعات تماس</span>
             </h4>
             <div className="text-xs space-y-1.5 text-[#A8988C]">
-              <p>تهران، خیابان ولیعصر، تقاطع فرشته، کافه رابیا</p>
-              <p dir="ltr" className="text-right">تلفن پشتیبانی: ۰۲۱-۲۲۰۰۳۳۴۴</p>
+              <p className="leading-relaxed">آدرس: کرج، فردیس، بلوار شهدای فردیس، خیابان چهل و یکم</p>
+              <p className="flex items-center gap-1.5 pt-0.5">
+                <span>تلفن و پشتیبانی:</span>
+                <a href="tel:02636561960" className="font-bold text-[#FDFBF7] hover:text-[#E0946B] transition-colors" dir="ltr">
+                  02636561960
+                </a>
+              </p>
               <button
                 onClick={onOpenCreditModal}
-                className="text-[#E0946B] hover:underline font-semibold block pt-1"
+                className="text-[#E0946B] hover:underline font-semibold block pt-1 cursor-pointer"
               >
                 آشنایی با سیستم اعتبار حساب رابیا
               </button>

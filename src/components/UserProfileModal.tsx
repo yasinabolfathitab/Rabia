@@ -26,6 +26,16 @@ interface UserProfileModalProps {
   onOpenTracking?: (orderNumber: string) => void;
 }
 
+const toEnglishDigits = (value: string): string => {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let res = value;
+  for (let i = 0; i < 10; i++) {
+    res = res.replaceAll(persianDigits[i], String(i)).replaceAll(arabicDigits[i], String(i));
+  }
+  return res.replace(/[^0-9]/g, '');
+};
+
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   isOpen,
   onClose,
@@ -123,7 +133,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <span>اعتبار حساب رابیا</span>
                 </div>
                 <div className="text-lg sm:text-2xl font-black copper-gradient-text">
-                  {user.rabiaCredit.toLocaleString('fa-IR')}
+                  {user.rabiaCredit.toLocaleString('en-US')}
                   <span className="text-[10px] sm:text-xs text-[#E0946B] mr-1">تومان</span>
                 </div>
               </div>
@@ -197,13 +207,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[#D8C7B8] block mb-1">شماره تلفن همراه</label>
+                <label className="text-xs font-semibold text-[#D8C7B8] block mb-1">شماره تلفن همراه (اعداد انگلیسی)</label>
                 <input
                   type="tel"
                   dir="ltr"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={11}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 text-xs text-[#FDFBF7] focus:outline-none text-right"
+                  onChange={(e) => setPhone(toEnglishDigits(e.target.value).slice(0, 11))}
+                  placeholder="09121234567"
+                  className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 text-xs text-[#FDFBF7] focus:outline-none text-left font-mono tracking-wider"
                 />
               </div>
 
@@ -268,7 +282,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         </span>
                       </div>
                       <span className="text-xs font-bold text-[#FDFBF7]">
-                        {ord.totalAmount.toLocaleString('fa-IR')} تومان
+                        {ord.totalAmount.toLocaleString('en-US')} تومان
                       </span>
                     </div>
 
@@ -277,7 +291,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-[#8C7B71] pt-1.5 border-t border-[#C87D55]/10">
-                      <span>{new Date(ord.createdAt).toLocaleDateString('fa-IR')}</span>
+                      <span>{new Date(ord.createdAt).toLocaleDateString('en-US')}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-[#E0946B] font-semibold">
                           {ord.status === 'delivered' ? 'تحویل داده شده' : 'در حال پیگیری'}
@@ -318,7 +332,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <div>
                       <div className="text-xs font-bold text-[#FDFBF7]">{tx.description}</div>
                       <div className="text-[10px] text-[#A8988C] mt-0.5">
-                        {new Date(tx.createdAt).toLocaleString('fa-IR')}
+                        {new Date(tx.createdAt).toLocaleString('en-US')}
                       </div>
                     </div>
 
@@ -328,7 +342,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       }`}
                     >
                       {tx.amount > 0 ? '+' : ''}
-                      {tx.amount.toLocaleString('fa-IR')} تومان
+                      {tx.amount.toLocaleString('en-US')} تومان
                     </div>
                   </div>
                 ))

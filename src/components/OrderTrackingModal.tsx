@@ -317,7 +317,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                     <div>
                       <div className="font-bold text-xs text-[#E0946B]">{ord.orderNumber}</div>
                       <div className="text-[10px] text-[#8C7B71]">
-                        {new Date(ord.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })} • {ord.totalAmount.toLocaleString('fa-IR')} تومان
+                        {new Date(ord.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} • {ord.totalAmount.toLocaleString('en-US')} تومان
                       </div>
                     </div>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#1F1916] text-[#D8C7B8] border border-[#C87D55]/20">
@@ -488,7 +488,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                     </span>
                   </div>
                   <span className="text-[10px] text-[#8C7B71] shrink-0 font-medium mr-2">
-                    زمان ثبت: {new Date(activeOrder.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                    زمان ثبت: {new Date(activeOrder.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                   </span>
                 </div>
               </div>
@@ -584,7 +584,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                             <span className="font-semibold text-[#FDFBF7]">{it.name}</span>
                           </div>
                           <span className="font-bold text-[#D8C7B8]">
-                            {(it.price * it.quantity).toLocaleString('fa-IR')} تومان
+                            {(it.price * it.quantity).toLocaleString('en-US')} تومان
                           </span>
                         </div>
                       ))}
@@ -595,7 +595,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   <div className="p-3 rounded-xl bg-[#241E1B] border border-[#C87D55]/20 flex items-center justify-between">
                     <span className="text-xs text-[#A8988C] font-bold">مبلغ کل فاکتور:</span>
                     <div className="text-sm sm:text-base font-black text-[#F5D3C1]">
-                      {activeOrder.totalAmount.toLocaleString('fa-IR')}{' '}
+                      {activeOrder.totalAmount.toLocaleString('en-US')}{' '}
                       <span className="text-xs text-[#A8988C] font-normal">تومان</span>
                     </div>
                   </div>
@@ -610,10 +610,10 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <a
-                    href="tel:02122003344"
+                    href="tel:02636561960"
                     className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl bg-[#2D2420] hover:bg-[#3D312A] text-[#F5D3C1] font-bold border border-[#C87D55]/30 text-center transition-all"
                   >
-                    تماس با کافه: ۰۲۱-۲۲۰۰۳۳۴۴
+                    تماس با کافه: 02636561960
                   </a>
                   {onOpenMenu && (
                     <button

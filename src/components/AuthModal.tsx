@@ -9,6 +9,16 @@ interface AuthModalProps {
   onLoginSuccess: (user: User) => void;
 }
 
+const toEnglishDigits = (value: string): string => {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let res = value;
+  for (let i = 0; i < 10; i++) {
+    res = res.replaceAll(persianDigits[i], String(i)).replaceAll(arabicDigits[i], String(i));
+  }
+  return res.replace(/[^0-9]/g, '');
+};
+
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   
@@ -33,13 +43,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     e.preventDefault();
     setErrorMessage('');
 
-    if (!loginPhone.trim() || !loginPassword.trim()) {
+    const cleanLoginPhone = toEnglishDigits(loginPhone);
+    if (!cleanLoginPhone || !loginPassword.trim()) {
       setErrorMessage('لطفاً شماره تلفن و رمز عبور خود را وارد نمایید.');
       return;
     }
 
     setIsSubmitting(true);
-    const res = loginUser(loginPhone, loginPassword);
+    const res = loginUser(cleanLoginPhone, loginPassword);
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -62,20 +73,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
       return;
     }
 
-    if (!regPhone.trim() || regPhone.trim().length < 10) {
-      setErrorMessage('لطفاً یک شماره تلفن همراه معتبر ۱۱ رقمی وارد نمایید.');
+    const cleanPhone = toEnglishDigits(regPhone);
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setErrorMessage('لطفاً یک شماره تلفن همراه معتبر 11 رقمی را فقط با اعداد انگلیسی وارد نمایید (مثال: 09121234567).');
       return;
     }
 
     if (!regPassword.trim() || regPassword.trim().length < 4) {
-      setErrorMessage('رمز عبور باید حداقل ۴ کاراکتر باشد.');
+      setErrorMessage('رمز عبور باید حداقل 4 کاراکتر باشد.');
       return;
     }
 
     setIsSubmitting(true);
     const res = registerUser({
       name: regName,
-      phone: regPhone,
+      phone: cleanPhone,
       password: regPassword,
       address: regAddress,
     });
@@ -195,10 +207,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     <input
                       type="tel"
                       dir="ltr"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={11}
                       value={loginPhone}
-                      onChange={(e) => setLoginPhone(e.target.value)}
+                      onChange={(e) => setLoginPhone(toEnglishDigits(e.target.value).slice(0, 11))}
                       placeholder="09121234567"
-                      className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3.5 py-2.5 pl-10 text-xs sm:text-sm text-[#FDFBF7] focus:outline-none text-right"
+                      className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3.5 py-2.5 pl-10 text-xs sm:text-sm text-[#FDFBF7] focus:outline-none text-left font-mono tracking-wider placeholder:text-neutral-500"
                     />
                     <Phone className="w-4 h-4 text-[#A8988C] absolute left-3 top-3" />
                   </div>
@@ -262,13 +277,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     <input
                       type="tel"
                       dir="ltr"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={11}
                       value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      placeholder="0912..."
-                      className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 pl-9 text-xs text-[#FDFBF7] focus:outline-none text-right"
+                      onChange={(e) => setRegPhone(toEnglishDigits(e.target.value).slice(0, 11))}
+                      placeholder="09121234567"
+                      className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 pl-9 text-xs text-[#FDFBF7] focus:outline-none text-left font-mono tracking-wider placeholder:text-neutral-500"
                     />
                     <Phone className="w-4 h-4 text-[#A8988C] absolute left-2.5 top-2.5" />
                   </div>
+                  <p className="text-[10px] text-[#A8988C] mt-1 text-right">
+                    تنها اعداد انگلیسی مجاز است (مثال: 09121234567)
+                  </p>
                 </div>
 
                 <div>
@@ -281,7 +302,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                       dir="ltr"
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="حداقل ۴ کاراکتر"
+                      placeholder="حداقل 4 کاراکتر"
                       className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 pl-9 text-xs text-[#FDFBF7] focus:outline-none text-right"
                     />
                     <Lock className="w-4 h-4 text-[#A8988C] absolute left-2.5 top-2.5" />

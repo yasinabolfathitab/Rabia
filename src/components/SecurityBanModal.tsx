@@ -53,7 +53,7 @@ export const SecurityBanModal: React.FC<SecurityBanModalProps> = ({ user, reason
             </div>
           )}
           <div className="text-[10px] text-[#8F7E73] text-left pt-1" dir="ltr">
-            زمان ثبت تخلف: {user.bannedAt ? new Date(user.bannedAt).toLocaleString('fa-IR') : new Date().toLocaleString('fa-IR')}
+            زمان ثبت تخلف: {user.bannedAt ? new Date(user.bannedAt).toLocaleString('en-US') : new Date().toLocaleString('en-US')}
           </div>
         </div>
 

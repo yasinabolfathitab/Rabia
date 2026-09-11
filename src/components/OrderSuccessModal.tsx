@@ -101,7 +101,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
             <div className="flex justify-between pt-1 border-t border-[#C87D55]/10">
               <span className="text-[#8C7B71]">مبلغ کل:</span>
               <span className="font-black text-sm text-[#FDFBF7]">
-                {order.totalAmount.toLocaleString('fa-IR')} تومان
+                {order.totalAmount.toLocaleString('en-US')} تومان
               </span>
             </div>
           </div>
@@ -149,7 +149,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
           {order.items.map((it, idx) => (
             <div key={idx} className="flex justify-between text-xs text-[#FDFBF7]">
               <span>{it.name} × {it.quantity}</span>
-              <span className="text-[#E0946B]">{(it.price * it.quantity).toLocaleString('fa-IR')} تومان</span>
+              <span className="text-[#E0946B]">{(it.price * it.quantity).toLocaleString('en-US')} تومان</span>
             </div>
           ))}
         </div>

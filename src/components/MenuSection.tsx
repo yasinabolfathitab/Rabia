@@ -238,7 +238,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                     </div>
                     <div className="text-left shrink-0">
                       <span className="text-sm sm:text-base font-black text-[#E0946B]">
-                        {item.price.toLocaleString('fa-IR')}
+                        {item.price.toLocaleString('en-US')}
                       </span>
                       <span className="text-[9px] text-[#A8988C] mr-1">تومان</span>
                     </div>
@@ -385,7 +385,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                 <div>
                   <span className="text-[10px] text-[#D8C7B8] block">قیمت آیتم:</span>
                   <span className="text-lg sm:text-xl font-black text-[#E0946B]">
-                    {detailItem.price.toLocaleString('fa-IR')}
+                    {detailItem.price.toLocaleString('en-US')}
                   </span>
                   <span className="text-xs text-[#D8C7B8] mr-1">تومان</span>
                 </div>

@@ -979,7 +979,7 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
               banUserForTampering(
                 user.id,
                 'مغایرت اعتبار با دیتابیس ابری (تلاش برای جعل با Inspect)',
-                `اعتبار ادعایی: ${user.rabiaCredit.toLocaleString('fa-IR')} تومان | اعتبار واقعی سرور: ${serverCredit.toLocaleString('fa-IR')} تومان`
+                `اعتبار ادعایی: ${user.rabiaCredit.toLocaleString('en-US')} تومان | اعتبار واقعی سرور: ${serverCredit.toLocaleString('en-US')} تومان`
               );
               return {
                 success: false,
@@ -1010,7 +1010,7 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
       user.id,
       -orderInput.totalAmount,
       'order_payment',
-      `پرداخت سفارش آنلاین رابیا (${orderInput.totalAmount.toLocaleString('fa-IR')} تومان)`
+      `پرداخت سفارش آنلاین رابیا (${orderInput.totalAmount.toLocaleString('en-US')} تومان)`
     );
   }
 
@@ -1338,7 +1338,7 @@ export function exportOrdersToExcelCSV() {
     if (o.status === 'delivered') statusText = 'تحویل داده شده';
     if (o.status === 'cancelled') statusText = 'لغو شده';
 
-    const dateStr = new Date(o.createdAt).toLocaleString('fa-IR');
+    const dateStr = new Date(o.createdAt).toLocaleString('en-US');
 
     return [
       `"${o.orderNumber}"`,

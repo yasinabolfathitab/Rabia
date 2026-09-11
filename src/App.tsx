@@ -268,7 +268,7 @@ export default function App() {
             <div className="flex flex-col text-right leading-tight pr-0.5">
               <span className="text-[11px] font-black text-[#FDFBF7]">سبد خرید</span>
               <span className="text-[10px] font-bold text-[#E0946B]">
-                {cartTotalPrice.toLocaleString('fa-IR')} ت
+                {cartTotalPrice.toLocaleString('en-US')} ت
               </span>
             </div>
           </button>

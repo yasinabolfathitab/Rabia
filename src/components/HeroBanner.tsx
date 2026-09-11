@@ -9,6 +9,16 @@ interface HeroBannerProps {
 export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCreditInfo }) => {
   return (
     <div className="relative overflow-hidden bg-gradient-to-b from-[#161311] via-[#1A1614] to-[#12100E] border-b border-[#C87D55]/20 py-12 sm:py-16">
+      {/* Background ambient banner texture from 1.jpg */}
+      <div className="absolute inset-0 -z-0 opacity-15 overflow-hidden pointer-events-none">
+        <img
+          src="/1.jpg"
+          alt=""
+          className="w-full h-full object-cover filter blur-md scale-110"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#12100E]/80 via-transparent to-[#12100E]"></div>
+      </div>
+
       {/* Subtle luxury glow backgrounds */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#C87D55]/10 rounded-full blur-3xl pointer-events-none -z-0"></div>
       <div className="absolute bottom-0 left-10 w-72 h-72 bg-[#D98A60]/10 rounded-full blur-3xl pointer-events-none -z-0"></div>
@@ -16,49 +26,49 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Main content */}
-          <div className="lg:col-span-7 space-y-6 text-right">
+          <div className="lg:col-span-7 space-y-6 text-center lg:text-right flex flex-col items-center lg:items-start">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#241E1B] border border-[#C87D55]/30 text-xs font-semibold text-[#E0946B]">
               <Sparkles className="w-3.5 h-3.5 text-[#E0946B]" />
               <span>تجربه‌ای متفاوت از قهوه تخصصی و پذیرایی لوکس</span>
             </div>
 
-            <h2 className="text-3xl sm:text-5xl font-black text-[#FDFBF7] leading-tight tracking-tight">
+            <h2 className="text-3xl sm:text-5xl font-black text-[#FDFBF7] leading-tight tracking-tight text-center lg:text-right">
               طعم اصیل آرامش در <br />
               <span className="copper-gradient-text font-black">کافه رابیا (Rabia)</span>
             </h2>
 
-            <p className="text-sm sm:text-base text-[#D4C4B7] leading-relaxed max-w-xl font-light">
+            <p className="text-sm sm:text-base text-[#D4C4B7] leading-relaxed max-w-xl font-light text-center lg:text-right mx-auto lg:mx-0">
               منوی دست‌چین شده از بهترین خاستگاه‌های قهوه جهان، نوشیدنی‌های بار سرد، 
               شیرینی‌های تازه و کراسان‌های فرانسوی در محیطی آرام.
             </p>
 
             {/* Features pills */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 w-full max-w-xl lg:max-w-none">
+              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
                 <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
                   <Award className="w-4 h-4" />
                 </div>
-                <div>
-                  <div className="text-xs font-bold text-[#FDFBF7]">عربیکا ۱۰۰٪ تخصصی</div>
+                <div className="text-right">
+                  <div className="text-xs font-bold text-[#FDFBF7]">عربیکا 100% تخصصی</div>
                   <div className="text-[10px] text-[#A8988C]">برشته‌کاری تازه</div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center gap-2.5">
+              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
                 <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
                   <Wallet className="w-4 h-4" />
                 </div>
-                <div>
+                <div className="text-right">
                   <div className="text-xs font-bold text-[#FDFBF7]">اعتبار هدیه رابیا</div>
                   <div className="text-[10px] text-[#A8988C]">با هر بار خرید</div>
                 </div>
               </div>
 
-              <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center gap-2.5">
+              <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
                 <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
                   <Clock className="w-4 h-4" />
                 </div>
-                <div>
+                <div className="text-right">
                   <div className="text-xs font-bold text-[#FDFBF7]">سفارش سریع و لحظه‌ای</div>
                   <div className="text-[10px] text-[#A8988C]">سرو در سالن و بیرون‌بر</div>
                 </div>
@@ -66,10 +76,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
             </div>
 
             {/* CTAs */}
-            <div className="flex flex-wrap items-center gap-3.5 pt-2">
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3.5 pt-2 w-full">
               <button
                 onClick={onScrollToMenu}
-                className="px-6 py-3 rounded-xl copper-gradient text-white font-bold text-sm shadow-lg shadow-[#C87D55]/25 hover:shadow-[#C87D55]/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl copper-gradient text-white font-bold text-sm shadow-lg shadow-[#C87D55]/25 hover:shadow-[#C87D55]/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>مشاهده منو و سفارش آنلاین</span>
                 <ArrowDown className="w-4 h-4" />
@@ -77,7 +87,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
 
               <button
                 onClick={onOpenCreditInfo}
-                className="px-5 py-3 rounded-xl bg-[#241E1B] hover:bg-[#2C2420] border border-[#C87D55]/40 text-[#F5D3C1] font-semibold text-sm transition-all"
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-[#241E1B] hover:bg-[#2C2420] border border-[#C87D55]/40 text-[#F5D3C1] font-semibold text-sm transition-all text-center cursor-pointer"
               >
                 باشگاه مشتریان و اعتبار رابیا
               </button>
@@ -88,13 +98,13 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-sm perspective-1000 group">
               <div className="relative rounded-3xl overflow-hidden border border-[#C87D55]/30 bg-gradient-to-br from-[#241E1B] to-[#161311] shadow-2xl shadow-black/80 p-4 transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-1">
-                <div className="relative h-64 rounded-2xl overflow-hidden">
+                <div className="relative h-72 sm:h-80 rounded-2xl overflow-hidden">
                   <img
-                    src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80"
+                    src="/1.jpg"
                     alt="کافه رابیا"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#161311] via-transparent to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#161311]/90 via-transparent to-transparent"></div>
                   <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-[#161311]/80 backdrop-blur-md border border-[#C87D55]/40 text-[11px] font-bold text-[#F5D3C1]">
                     امضای کافه رابیا
                   </div>

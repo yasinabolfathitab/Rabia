@@ -360,7 +360,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
     if (selectedUser.rabiaCredit < num) {
       setCreditFeedback({
         success: false,
-        message: `اعتبار کاربر (${selectedUser.rabiaCredit.toLocaleString('fa-IR')} تومان) کمتر از این مبلغ است!`,
+        message: `اعتبار کاربر (${selectedUser.rabiaCredit.toLocaleString('en-US')} تومان) کمتر از این مبلغ است!`,
       });
       return;
     }
@@ -784,7 +784,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                         </span>
                       </div>
                       <p className="text-xs sm:text-sm font-black text-white mt-1">
-                        {newOrderAlert.userName} • {newOrderAlert.orderType === 'dine_in' ? `میز ${newOrderAlert.tableNumber || 'حضوری'}` : 'بیرون‌بر'} • {newOrderAlert.totalAmount?.toLocaleString('fa-IR')} تومان
+                        {newOrderAlert.userName} • {newOrderAlert.orderType === 'dine_in' ? `میز ${newOrderAlert.tableNumber || 'حضوری'}` : 'بیرون‌بر'} • {newOrderAlert.totalAmount?.toLocaleString('en-US')} تومان
                       </p>
                     </div>
                   </div>
@@ -903,7 +903,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           <div>
                             <span className="text-base font-black text-[#E0946B]">{ord.orderNumber}</span>
                             <span className="text-[11px] text-[#A8988C] block">
-                              {new Date(ord.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(ord.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                             </span>
                           </div>
 
@@ -961,12 +961,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           {ord.items.map((it, idx) => (
                             <div key={idx} className="flex justify-between text-xs text-[#FDFBF7]">
                               <span>{it.name} × {it.quantity}</span>
-                              <span className="text-[#E0946B]">{(it.price * it.quantity).toLocaleString('fa-IR')} ت</span>
+                              <span className="text-[#E0946B]">{(it.price * it.quantity).toLocaleString('en-US')} ت</span>
                             </div>
                           ))}
                           <div className="pt-1.5 border-t border-[#C87D55]/15 flex justify-between text-xs font-black text-white">
                             <span>مبلغ کل:</span>
-                            <span className="text-[#E0946B]">{ord.totalAmount.toLocaleString('fa-IR')} تومان</span>
+                            <span className="text-[#E0946B]">{ord.totalAmount.toLocaleString('en-US')} تومان</span>
                           </div>
                         </div>
 
@@ -1105,7 +1105,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                             </div>
                           )}
                           <div className="text-[10px] text-[#8F7E73]">
-                            زمان ثبت تخلف: {u.bannedAt ? new Date(u.bannedAt).toLocaleString('fa-IR') : 'نامشخص'}
+                            زمان ثبت تخلف: {u.bannedAt ? new Date(u.bannedAt).toLocaleString('en-US') : 'نامشخص'}
                           </div>
                         </div>
 
@@ -1159,7 +1159,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                             </div>
                           )}
                           <div className="text-[10px] text-[#7F6F65] mt-1">
-                            تاریخ درخواست: {new Date(u.createdAt).toLocaleString('fa-IR')}
+                            تاریخ درخواست: {new Date(u.createdAt).toLocaleString('en-US')}
                           </div>
                         </div>
 
@@ -1200,7 +1200,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-bold text-[#FDFBF7]">{u.name}</span>
                         <span className="text-xs font-black text-[#E0946B]">
-                          اعتبار: {u.rabiaCredit.toLocaleString('fa-IR')} تومان
+                          اعتبار: {u.rabiaCredit.toLocaleString('en-US')} تومان
                         </span>
                       </div>
                       <div className="text-xs text-[#A8988C]" dir="ltr">
@@ -1279,7 +1279,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     <div className="text-right sm:text-left bg-[#2A221E] px-4 py-2 rounded-xl border border-[#C87D55]/30">
                       <span className="text-xs text-[#A8988C] block">موجودی فعلی اعتبار رابیا:</span>
                       <span className="text-xl font-black text-[#E0946B]">
-                        {selectedUser.rabiaCredit.toLocaleString('fa-IR')} تومان
+                        {selectedUser.rabiaCredit.toLocaleString('en-US')} تومان
                       </span>
                     </div>
                   </div>
@@ -1369,7 +1369,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           type="text"
                           value={deductNote}
                           onChange={(e) => setDeductNote(e.target.value)}
-                          placeholder="مثلاً: ۲ تا لاته و چیزکیک سن‌سباستین"
+                          placeholder="مثلاً: 2 تا لاته و چیزکیک سن‌سباستین"
                           className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-2 text-xs text-[#FDFBF7] focus:outline-none"
                         />
                       </div>
@@ -1534,7 +1534,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                                 {it.name}
                               </h4>
                               <span className="text-xs font-black text-[#E0946B] shrink-0">
-                                {it.price.toLocaleString('fa-IR')} ت
+                                {it.price.toLocaleString('en-US')} ت
                               </span>
                             </div>
                             {it.nameEn && (
@@ -1837,7 +1837,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                             {CATEGORY_LABELS[itemToDelete.category] || itemToDelete.category}
                           </span>
                           <span className="font-black text-[#E0946B]">
-                            {itemToDelete.price.toLocaleString('fa-IR')} تومان
+                            {itemToDelete.price.toLocaleString('en-US')} تومان
                           </span>
                         </div>
                       </div>
@@ -1883,7 +1883,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="p-4 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30">
                   <span className="text-[11px] text-[#A8988C] block">درآمد امروز:</span>
                   <span className="text-lg sm:text-xl font-black text-[#E0946B]">
-                    {stats.todayRevenue.toLocaleString('fa-IR')}
+                    {stats.todayRevenue.toLocaleString('en-US')}
                   </span>
                   <span className="text-[10px] text-[#A8988C] mr-1">تومان</span>
                 </div>
@@ -1891,7 +1891,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="p-4 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30">
                   <span className="text-[11px] text-[#A8988C] block">درآمد این هفته:</span>
                   <span className="text-lg sm:text-xl font-black text-[#FDFBF7]">
-                    {stats.weeklyRevenue.toLocaleString('fa-IR')}
+                    {stats.weeklyRevenue.toLocaleString('en-US')}
                   </span>
                   <span className="text-[10px] text-[#A8988C] mr-1">تومان</span>
                 </div>
@@ -1899,7 +1899,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="p-4 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30">
                   <span className="text-[11px] text-[#A8988C] block">درآمد ماه جاری:</span>
                   <span className="text-lg sm:text-xl font-black text-emerald-400">
-                    {stats.monthlyRevenue.toLocaleString('fa-IR')}
+                    {stats.monthlyRevenue.toLocaleString('en-US')}
                   </span>
                   <span className="text-[10px] text-[#A8988C] mr-1">تومان</span>
                 </div>
@@ -1907,7 +1907,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="p-4 rounded-2xl bg-[#1C1613] border border-[#C87D55]/30">
                   <span className="text-[11px] text-[#A8988C] block">کل درآمد سالانه:</span>
                   <span className="text-lg sm:text-xl font-black copper-gradient-text">
-                    {stats.yearlyRevenue.toLocaleString('fa-IR')}
+                    {stats.yearlyRevenue.toLocaleString('en-US')}
                   </span>
                   <span className="text-[10px] text-[#A8988C] mr-1">تومان</span>
                 </div>
@@ -1918,9 +1918,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[#A8988C]">دوره گزارش:</span>
                   {[
-                    { id: 'daily', label: 'روزانه (۷ روز اخیر)' },
-                    { id: 'weekly', label: 'هفتگی (۴ هفته اخیر)' },
-                    { id: 'monthly', label: 'ماهانه (۶ ماه اخیر)' },
+                    { id: 'daily', label: 'روزانه (7 روز اخیر)' },
+                    { id: 'weekly', label: 'هفتگی (4 هفته اخیر)' },
+                    { id: 'monthly', label: 'ماهانه (6 ماه اخیر)' },
                     { id: 'yearly', label: 'سالانه' },
                   ].map((p) => (
                     <button
@@ -1977,7 +1977,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           color: '#FDFBF7',
                           fontSize: '12px',
                         }}
-                        formatter={(val: any) => [`${Number(val).toLocaleString('fa-IR')} تومان`, 'درآمد']}
+                        formatter={(val: any) => [`${Number(val).toLocaleString('en-US')} تومان`, 'درآمد']}
                       />
                       <Area
                         type="monotone"
@@ -2040,7 +2040,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="space-y-2 text-right">
                   <label className="text-xs font-bold text-[#D8C7B8] flex items-center justify-between">
                     <span>رمز عبور بخش دیتابیس:</span>
-                    <span className="text-[10px] text-[#A8988C]">رمز اختصاصی ۴ رقمی</span>
+                    <span className="text-[10px] text-[#A8988C]">رمز اختصاصی 4 رقمی</span>
                   </label>
                   <div className="relative">
                     <input

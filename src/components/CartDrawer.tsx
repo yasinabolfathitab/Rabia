@@ -29,6 +29,16 @@ interface CartDrawerProps {
   onOrderSuccess: (order: Order) => void;
 }
 
+const toEnglishDigits = (value: string): string => {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let res = value;
+  for (let i = 0; i < 10; i++) {
+    res = res.replaceAll(persianDigits[i], String(i)).replaceAll(arabicDigits[i], String(i));
+  }
+  return res.replace(/[^0-9]/g, '');
+};
+
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
   onClose,
@@ -44,7 +54,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [tableNumber, setTableNumber] = useState('میز ۱');
+  const [tableNumber, setTableNumber] = useState('میز شماره 1');
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -115,7 +125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       }
       if (!hasEnoughRabiaCredit) {
         setErrorMessage(
-          `موجودی اعتبار رابیا شما (${user.rabiaCredit.toLocaleString('fa-IR')} تومان) کمتر از مبلغ کل سفارش است. لطفاً گزینه کارت‌کشیدن در صندوق را انتخاب کنید یا حسابتان را شارژ نمایید.`
+          `موجودی اعتبار رابیا شما (${user.rabiaCredit.toLocaleString('en-US')} تومان) کمتر از مبلغ کل سفارش است. لطفاً گزینه کارت‌کشیدن در صندوق را انتخاب کنید یا حسابتان را شارژ نمایید.`
         );
         return;
       }
@@ -264,7 +274,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         )}
                       </div>
                       <div className="text-xs font-semibold text-[#E0946B] mt-1">
-                        {(c.item.price * c.quantity).toLocaleString('fa-IR')}{' '}
+                        {(c.item.price * c.quantity).toLocaleString('en-US')}{' '}
                         <span className="text-[10px] text-[#A8988C]">تومان</span>
                       </div>
                     </div>
@@ -363,14 +373,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#A8988C] block mb-1">شماره تماس</label>
+                    <label className="text-[11px] text-[#A8988C] block mb-1">شماره تماس (اعداد انگلیسی)</label>
                     <input
                       type="tel"
                       dir="ltr"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={11}
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="0912..."
-                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 text-xs text-[#FDFBF7] focus:outline-none text-right"
+                      onChange={(e) => setCustomerPhone(toEnglishDigits(e.target.value).slice(0, 11))}
+                      placeholder="09121234567"
+                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 text-xs text-[#FDFBF7] focus:outline-none text-left font-mono tracking-wider placeholder:text-neutral-500"
                     />
                   </div>
                 </div>
@@ -404,14 +417,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       onChange={(e) => setTableNumber(e.target.value)}
                       className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 text-xs text-[#FDFBF7] focus:outline-none"
                     >
-                      <option value="میز ۱ (سالن همکف)">میز ۱ (سالن همکف)</option>
-                      <option value="میز ۲ (کنار پنجره)">میز ۲ (کنار پنجره)</option>
-                      <option value="میز ۳ (VIP سالن)">میز ۳ (VIP سالن)</option>
-                      <option value="میز ۴ (سالن بالا)">میز ۴ (سالن بالا)</option>
-                      <option value="میز ۵">میز ۵</option>
-                      <option value="میز ۶">میز ۶</option>
-                      <option value="میز ۷ (تراس و فضای باز)">میز ۷ (تراس و فضای باز)</option>
-                      <option value="سرو در بار">سرو در کانتر بار</option>
+                      <option value="میز شماره 1">میز شماره 1</option>
+                      <option value="میز شماره 2">میز شماره 2</option>
+                      <option value="میز شماره 3">میز شماره 3</option>
+                      <option value="میز شماره 4">میز شماره 4</option>
+                      <option value="میز شماره 5">میز شماره 5</option>
+                      <option value="میز شماره 6">میز شماره 6</option>
+                      <option value="میز شماره 7">میز شماره 7</option>
+                      <option value="میز شماره 8">میز شماره 8</option>
+                      <option value="میز شماره 9">میز شماره 9</option>
+                      <option value="میز شماره 10">میز شماره 10</option>
                     </select>
                   </div>
                 )}
@@ -474,7 +489,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             hasEnoughRabiaCredit ? 'text-emerald-400' : 'text-amber-400'
                           }`}
                         >
-                          {user.rabiaCredit.toLocaleString('fa-IR')} تومان
+                          {user.rabiaCredit.toLocaleString('en-US')} تومان
                         </span>
                       ) : (
                         <span className="text-[#E0946B]">نیازمند ورود به حساب</span>
@@ -535,7 +550,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="p-4 rounded-2xl bg-[#1D1815] border border-[#C87D55]/20 space-y-2">
                 <div className="flex justify-between text-xs text-[#A8988C]">
                   <span>مجموع سفارش:</span>
-                  <span className="text-[#FDFBF7] font-semibold">{subtotal.toLocaleString('fa-IR')} تومان</span>
+                  <span className="text-[#FDFBF7] font-semibold">{subtotal.toLocaleString('en-US')} تومان</span>
                 </div>
                 <div className="flex justify-between text-xs text-[#A8988C]">
                   <span>بسته‌بندی و سرو رابیا:</span>
@@ -543,7 +558,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
                 <div className="pt-2 border-t border-[#C87D55]/20 flex justify-between text-sm sm:text-base font-black text-[#FDFBF7]">
                   <span>مبلغ نهایی قابل پرداخت:</span>
-                  <span className="text-[#E0946B]">{totalAmount.toLocaleString('fa-IR')} تومان</span>
+                  <span className="text-[#E0946B]">{totalAmount.toLocaleString('en-US')} تومان</span>
                 </div>
               </div>
 

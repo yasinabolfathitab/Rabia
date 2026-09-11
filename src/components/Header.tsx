@@ -30,12 +30,12 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>کافه رابیا همه روزه از ساعت ۸:۰۰ صبح الی ۲۴:۰۰ باز است</span>
+            <span>کافه رابیا: ساعت کاری 8:00 _ 22:00 همه روزه</span>
           </div>
           <div className="flex items-center gap-4 text-[#A8988C]">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-[#C87D55]" />
-              سرو در سالن و سفارش بیرون‌بر
+              کرج، فردیس، بلوار شهدای فردیس، خیابان چهل و یکم
             </span>
           </div>
         </div>
@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                 </div>
                 <div className="text-[#E0946B] font-bold text-[10px] sm:text-xs">
-                  {user.rabiaCredit.toLocaleString('fa-IR')} ت
+                  {user.rabiaCredit.toLocaleString('en-US')} ت
                 </div>
               </div>
             </button>
