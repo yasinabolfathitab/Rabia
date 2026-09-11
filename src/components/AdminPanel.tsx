@@ -135,6 +135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [isTestingSb, setIsTestingSb] = useState(false);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [sbStatus, setSbStatus] = useState<{ success: boolean; message: string; tablesFound?: boolean } | null>(null);
+  const [isCheckingSb, setIsCheckingSb] = useState(true);
 
   // Database Settings Separate Password Protection (PIN: 4415)
   const [isDbUnlocked, setIsDbUnlocked] = useState(false);
@@ -212,15 +213,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
       setSbKey(conf.key);
 
       if (conf.url && conf.key && isValidSupabaseUrl(conf.url)) {
-        testSupabaseConnection(conf.url, conf.key).then((res) => {
-          setSbStatus(res);
-          if (res.success) {
-            initSupabaseRealtimeSync();
-            syncAllWithSupabase().then(() => refreshData());
-          }
-        });
+        setIsCheckingSb(true);
+        testSupabaseConnection(conf.url, conf.key)
+          .then((res) => {
+            setSbStatus(res);
+            setIsCheckingSb(false);
+            if (res.success) {
+              initSupabaseRealtimeSync();
+              syncAllWithSupabase().then(() => refreshData());
+            }
+          })
+          .catch(() => {
+            setIsCheckingSb(false);
+          });
       } else {
         setSbStatus(null);
+        setIsCheckingSb(false);
       }
 
       // Subscribe to real-time events
@@ -500,7 +508,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Supabase Status Indicator in Header */}
-            {sbStatus?.success ? (
+            {isCheckingSb ? (
+              <button
+                onClick={() => setActiveTab('database_settings')}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-[#241E1B] border border-[#C87D55]/30 text-[#D8C7B8] text-[11px] sm:text-xs font-bold transition-all shrink-0"
+                title="در حال بررسی اتصال به دیتابیس..."
+              >
+                <RefreshCw className="w-3 h-3 text-[#E0946B] animate-spin shrink-0" />
+                <span className="hidden sm:inline">دیتابیس:</span>
+                <span>در حال اتصال...</span>
+              </button>
+            ) : sbStatus?.success ? (
               <button
                 onClick={() => setActiveTab('database_settings')}
                 className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-700/60 text-emerald-300 text-[11px] sm:text-xs font-bold hover:bg-emerald-950 transition-all shrink-0"
@@ -709,7 +727,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               )}
 
               {/* Online Cloud Database Status Banner */}
-              {sbStatus?.success ? (
+              {isCheckingSb ? (
+                <div className="px-3.5 py-2.5 rounded-xl bg-[#241E1B] border border-[#C87D55]/30 text-[#D8C7B8] text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 text-[#E0946B] animate-spin shrink-0" />
+                    <span>در حال بررسی وضعیت اتصال به دیتابیس ابری (Supabase)...</span>
+                  </div>
+                  <span className="text-[10px] text-[#A8988C] hidden sm:inline">Connecting...</span>
+                </div>
+              ) : sbStatus?.success ? (
                 <div className="px-3.5 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
@@ -726,12 +752,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                         دیتابیس آنلاین (Supabase) متصل نیست!
                       </strong>
                       <p className="text-[11px] sm:text-xs text-amber-300/80 mt-0.5 leading-relaxed">
-                        برای اینکه سفارش‌های ثبت‌شده در گوشی مشتریان به این لپ‌تاپ برسد، باید آدرس و کلید Supabase ثبت شوند.
+                        {sbStatus?.message || 'برای اینکه سفارش‌های ثبت‌شده در گوشی مشتریان به این لپ‌تاپ برسد، اتصال دیتابیس را فعال کنید.'}
                       </p>
                     </div>
                   </div>
                   <button
-                    onClick={() => setActiveTab('database_settings')}
+                    onClick={async () => {
+                      setIsCheckingSb(true);
+                      const conf = getSupabaseConfig();
+                      const res = await testSupabaseConnection(conf.url, conf.key);
+                      setSbStatus(res);
+                      setIsCheckingSb(false);
+                      if (res.success) {
+                        initSupabaseRealtimeSync();
+                        syncAllWithSupabase().then(() => refreshData());
+                      }
+                    }}
                     className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs font-bold transition-all shrink-0 self-end sm:self-center"
                   >
                     اتصال سریع دیتابیس
