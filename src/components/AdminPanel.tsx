@@ -33,6 +33,8 @@ import {
   Download,
   FileJson,
   ShieldCheck,
+  ShieldAlert,
+  UserX,
   AlertTriangle,
   Bell,
   Volume2,
@@ -63,6 +65,7 @@ import {
   updateOrderStatus, 
   getUsers, 
   approveUser, 
+  unbanUser,
   adjustUserCredit, 
   getMenuItems, 
   saveMenuItem, 
@@ -273,11 +276,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
 
   const pendingUsers = users.filter((u) => u.status === 'pending');
   const approvedUsers = users.filter((u) => u.status === 'approved');
+  const bannedUsers = users.filter((u) => u.status === 'banned');
 
   // Handle User Approval
   const handleApproveUser = (userId: string, approve: boolean) => {
     approveUser(userId, approve);
     refreshData();
+  };
+
+  // Handle User Unban
+  const handleUnbanUser = (userId: string) => {
+    const res = unbanUser(userId);
+    setCreditFeedback(res);
+    refreshData();
+    if (selectedUser?.id === userId) {
+      const updated = getUsers().find((u) => u.id === userId);
+      setSelectedUser(updated || null);
+    }
   };
 
   // Handle Credit Search
@@ -1001,6 +1016,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 </button>
               </div>
 
+              {/* Security Incidents / Banned Users Alert Section */}
+              {bannedUsers.length > 0 && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-rose-950/40 border-2 border-rose-600/70 shadow-[0_0_25px_rgba(225,29,72,0.15)] space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0 animate-pulse">
+                        <ShieldAlert className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-black text-rose-200">
+                          🚨 هشدارهای امنیتی: کاربران مسدود شده ({bannedUsers.length})
+                        </h4>
+                        <p className="text-[11px] text-rose-300/80">
+                          تلاش غیرمجاز برای تغییر اعتبار با ابزارهای Inspect یا دستکاری کلاینت شناسایی و حساب‌های زیر خودکار مسدود گردیدند:
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-sm">
+                      {bannedUsers.length} تخلف ثبت شده
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 pt-2">
+                    {bannedUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="p-3.5 rounded-xl bg-[#181311] border border-rose-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-[#FDFBF7]">{u.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold">
+                              ⛔ مسدود شده امنیتی (Banned)
+                            </span>
+                          </div>
+                          <div className="text-xs text-[#A8988C]" dir="ltr">
+                            شماره تماس: <strong className="text-rose-200">{u.phone}</strong>
+                          </div>
+                          <div className="text-xs text-rose-400 font-medium">
+                            علت مسدودی: <span>{u.banReason || 'تلاش برای افزایش یا دستکاری غیرمجاز اعتبار'}</span>
+                          </div>
+                          {u.securityAlert && (
+                            <div className="text-[11px] text-amber-300/90 font-mono bg-black/40 px-2 py-1 rounded-md max-w-fit" dir="ltr">
+                              گزارش: {u.securityAlert}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-[#8F7E73]">
+                            زمان ثبت تخلف: {u.bannedAt ? new Date(u.bannedAt).toLocaleString('fa-IR') : 'نامشخص'}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleUnbanUser(u.id)}
+                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>رفع مسدودی (Unban)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Pending Approvals Section */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -1161,7 +1242,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {selectedUser.status === 'banned' ? (
+                    <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-600/70 text-rose-200 space-y-3">
+                      <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                        <ShieldAlert className="w-5 h-5 shrink-0" />
+                        <span>این حساب کاربری به دلیل تخلف امنیتی مسدود شده است!</span>
+                      </div>
+                      <p className="text-xs text-rose-300 leading-relaxed">
+                        علت مسدودی: {selectedUser.banReason || 'تلاش برای جعل و دستکاری اعتبار کیف پول'}. تا زمان رفع مسدودی توسط مدیریت، امکان انجام سفارش یا شارژ اعتبار برای این حساب وجود ندارد.
+                      </p>
+                      {selectedUser.securityAlert && (
+                        <div className="text-[11px] text-amber-300/90 font-mono bg-black/40 px-2.5 py-1.5 rounded-lg max-w-fit" dir="ltr">
+                          گزارش سیستم: {selectedUser.securityAlert}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleUnbanUser(selectedUser.id)}
+                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>رفع مسدودی این کاربر (Unban)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Action 1: Add/Charge Credit */}
                     <form onSubmit={handleChargeCredit} className="p-4 rounded-2xl bg-[#1A1513] border border-emerald-500/30 space-y-3">
                       <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
@@ -1235,6 +1340,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       </button>
                     </form>
                   </div>
+                  )}
                 </div>
               )}
             </div>

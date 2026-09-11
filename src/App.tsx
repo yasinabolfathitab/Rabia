@@ -10,10 +10,12 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { AdminPanel } from './components/AdminPanel';
 import { CreditInfoModal } from './components/CreditInfoModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
+import { SecurityBanModal } from './components/SecurityBanModal';
 import { Footer } from './components/Footer';
 
 import { User, MenuItem, CartItem, Order } from './types';
 import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync, parseIsAvailable } from './lib/database';
+import { initDevToolsProtection, startContinuousIntegrityGuard } from './lib/security';
 import { ShoppingBag, ArrowUp } from 'lucide-react';
 
 export default function App() {
@@ -90,10 +92,27 @@ export default function App() {
     });
   };
 
-  // Initialize Supabase realtime synchronization on mount
+  // Initialize DevTools protection and Supabase realtime synchronization on mount
   useEffect(() => {
+    const cleanupDevTools = initDevToolsProtection();
     initSupabaseRealtimeSync();
+
+    return () => {
+      cleanupDevTools();
+    };
   }, []);
+
+  // Continuous background integrity monitor for active user credit
+  useEffect(() => {
+    if (!currentUser) return;
+    const stopGuard = startContinuousIntegrityGuard(currentUser, (bannedUser) => {
+      setCurrentUser(bannedUser);
+    });
+
+    return () => {
+      stopGuard();
+    };
+  }, [currentUser?.id, currentUser?.rabiaCredit]);
 
   // Save cart changes
   useEffect(() => {
@@ -117,8 +136,14 @@ export default function App() {
         setMenuItems(getMenuItems());
       }
 
-      // If user status or credit updated, refresh current user
-      if (currentUser && (event.type === 'credit_updated' || event.type === 'user_updated' || event.type === 'user_status_changed')) {
+      // If user status, ban or credit updated, refresh current user
+      if (
+        currentUser && 
+        (event.type === 'credit_updated' || 
+         event.type === 'user_updated' || 
+         event.type === 'user_status_changed' || 
+         event.type === 'user_banned')
+      ) {
         const users = getUsers();
         const updated = users.find((u) => u.id === currentUser.id);
         if (updated) {
@@ -361,6 +386,15 @@ export default function App() {
         onOpenAuth={() => {
           setIsCreditInfoOpen(false);
           setIsAuthOpen(true);
+        }}
+      />
+
+      {/* Real-time Security Ban Modal */}
+      <SecurityBanModal
+        user={currentUser}
+        onAcknowledge={() => {
+          setCurrentUser(null);
+          localStorage.removeItem('rabia_active_user');
         }}
       />
     </div>

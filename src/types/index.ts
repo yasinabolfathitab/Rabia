@@ -1,4 +1,4 @@
-export type UserStatus = 'pending' | 'approved' | 'rejected';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'banned';
 
 export interface User {
   id: string;
@@ -8,6 +8,10 @@ export interface User {
   address?: string;
   rabiaCredit: number; // in Tomans
   status: UserStatus;
+  creditSignature?: string;
+  banReason?: string;
+  bannedAt?: string;
+  securityAlert?: string;
   createdAt: string;
 }
 

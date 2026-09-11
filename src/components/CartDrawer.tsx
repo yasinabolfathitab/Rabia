@@ -103,6 +103,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    if (user?.status === 'banned') {
+      setErrorMessage('حساب کاربری شما به دلیل تخلف امنیتی مسدود شده است و امکان ثبت سفارش وجود ندارد.');
+      return;
+    }
+
     if (paymentMethod === 'rabia_credit') {
       if (!user) {
         setErrorMessage('برای استفاده از اعتبار حساب رابیا، لطفاً ابتدا وارد حساب کاربری خود شوید.');

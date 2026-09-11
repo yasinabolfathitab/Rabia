@@ -1,8 +1,9 @@
 import { User, MenuItem, Order, CreditTransaction, OrderStatus, CafeStats } from '../types';
 import { INITIAL_MENU_ITEMS } from '../data/initialMenu';
 import { getSupabaseClient } from './supabase';
+import { signAndProtectUser, verifyUserCreditIntegrity, banUserForTampering } from './security';
 
-const USERS_KEY = 'rabia_users_data';
+export const USERS_KEY = 'rabia_users_data';
 const MENU_KEY = 'rabia_menu_data';
 const ORDERS_KEY = 'rabia_orders_data';
 const TRANSACTIONS_KEY = 'rabia_transactions_data';
@@ -139,16 +140,22 @@ export async function syncOrdersAndUsersWithSupabase() {
       .order('created_at', { ascending: false });
 
     if (!uErr && dbUsers && dbUsers.length > 0) {
-      const mappedUsers: User[] = dbUsers.map((raw: any) => ({
-        id: raw.id,
-        name: raw.name,
-        phone: raw.phone,
-        password: raw.password,
-        address: raw.address || '',
-        rabiaCredit: Number(raw.rabia_credit || 0),
-        status: raw.status,
-        createdAt: raw.created_at,
-      }));
+      const mappedUsers: User[] = dbUsers.map((raw: any) => {
+        const u: User = {
+          id: raw.id,
+          name: raw.name,
+          phone: raw.phone,
+          password: raw.password,
+          address: raw.address || '',
+          rabiaCredit: Number(raw.rabia_credit || 0),
+          status: raw.status || 'pending',
+          banReason: raw.ban_reason || undefined,
+          bannedAt: raw.banned_at || undefined,
+          securityAlert: raw.security_alert || undefined,
+          createdAt: raw.created_at,
+        };
+        return signAndProtectUser(u);
+      });
       localStorage.setItem(USERS_KEY, JSON.stringify(mappedUsers));
       emitRealtimeEvent('user_updated');
     }
@@ -242,8 +249,12 @@ export async function initSupabaseRealtimeSync() {
               address: raw.address || '',
               rabiaCredit: Number(raw.rabia_credit || 0),
               status: raw.status || 'pending',
+              banReason: raw.ban_reason || undefined,
+              bannedAt: raw.banned_at || undefined,
+              securityAlert: raw.security_alert || undefined,
               createdAt: raw.created_at,
             };
+            signAndProtectUser(newU);
             if (!users.some((u) => u.id === newU.id)) {
               users.unshift(newU);
               localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -257,6 +268,10 @@ export async function initSupabaseRealtimeSync() {
               users[idx].rabiaCredit = Number(raw.rabia_credit || 0);
               users[idx].name = raw.name;
               users[idx].address = raw.address || '';
+              if (raw.ban_reason !== undefined) users[idx].banReason = raw.ban_reason;
+              if (raw.banned_at !== undefined) users[idx].bannedAt = raw.banned_at;
+              if (raw.security_alert !== undefined) users[idx].securityAlert = raw.security_alert;
+              signAndProtectUser(users[idx]);
               localStorage.setItem(USERS_KEY, JSON.stringify(users));
               emitRealtimeEvent('user_status_changed', users[idx]);
               emitRealtimeEvent('credit_updated', { userId: raw.id, newCredit: users[idx].rabiaCredit });
@@ -573,6 +588,7 @@ export function registerUser(user: Omit<User, 'id' | 'rabiaCredit' | 'status' | 
     status: 'pending', // Requires admin approval
     createdAt: new Date().toISOString(),
   };
+  signAndProtectUser(newUser);
 
   users.unshift(newUser);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -613,6 +629,13 @@ export function loginUser(phone: string, password: string): { success: boolean; 
     return { success: false, message: 'کاربری با این شماره تلفن یافت نشد. لطفاً ابتدا ثبت نام کنید.' };
   }
 
+  if (user.status === 'banned') {
+    return {
+      success: false,
+      message: `حساب کاربری شما به دلیل تخلف امنیتی (${user.banReason || 'تلاش برای دستکاری اعتبار'}) مسدود شده است. جهت پیگیری با مدیریت کافه رابیا تماس بگیرید.`,
+    };
+  }
+
   if (user.password && user.password !== password) {
     return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
   }
@@ -627,6 +650,9 @@ export function loginUser(phone: string, password: string): { success: boolean; 
   if (user.status === 'rejected') {
     return { success: false, message: 'متاسفانه درخواست عضویت این شماره تلفن تایید نشده است.' };
   }
+
+  // Verify and re-sign user
+  signAndProtectUser(user);
 
   return { success: true, message: 'خوش آمدید!', user };
 }
@@ -666,6 +692,7 @@ export function approveUser(userId: string, approve: boolean = true) {
   const user = users.find((u) => u.id === userId);
   if (user) {
     user.status = approve ? 'approved' : 'rejected';
+    signAndProtectUser(user);
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
     emitRealtimeEvent('user_status_changed', user);
 
@@ -680,6 +707,42 @@ export function approveUser(userId: string, approve: boolean = true) {
         });
     }
   }
+}
+
+export function unbanUser(userId: string): { success: boolean; message: string } {
+  const users = getUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    return { success: false, message: 'کاربر مورد نظر یافت نشد.' };
+  }
+
+  user.status = 'approved';
+  user.banReason = undefined;
+  user.bannedAt = undefined;
+  user.securityAlert = undefined;
+  user.rabiaCredit = 0; // Fresh secure start
+  signAndProtectUser(user);
+
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('users')
+      .update({
+        status: 'approved',
+        rabia_credit: 0,
+      })
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (error) console.error('Supabase unban error:', error);
+      });
+  }
+
+  emitRealtimeEvent('user_status_changed', user);
+  emitRealtimeEvent('credit_updated', { userId: user.id, newCredit: 0 });
+
+  return { success: true, message: `مسدودی کاربر ${user.name} با موفقیت لغو شد و حساب او مجدداً فعال گردید.` };
 }
 
 export function findUserByPhone(phone: string): User | null {
@@ -713,11 +776,16 @@ export function adjustUserCredit(
     return { success: false, newCredit: 0, message: 'کاربر مورد نظر یافت نشد.' };
   }
 
+  if (user.status === 'banned') {
+    return { success: false, newCredit: 0, message: 'این حساب به دلیل تلاش برای دستکاری مسدود است و امکان تغییر اعتبار وجود ندارد.' };
+  }
+
   if (amount < 0 && user.rabiaCredit < Math.abs(amount)) {
     return { success: false, newCredit: user.rabiaCredit, message: 'موجودی اعتبار کاربر کمتر از مبلغ درخواستی است.' };
   }
 
   user.rabiaCredit = Math.max(0, user.rabiaCredit + amount);
+  signAndProtectUser(user);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
   const transaction: CreditTransaction = {
@@ -788,7 +856,80 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
   // If payment method is rabia_credit and user is provided, deduct credit
   if (orderInput.paymentMethod === 'rabia_credit' && orderInput.userId) {
     const user = getUsers().find((u) => u.id === orderInput.userId);
-    if (!user || user.rabiaCredit < orderInput.totalAmount) {
+    if (!user) {
+      return {
+        success: false,
+        message: 'کاربر مورد نظر یافت نشد.',
+      };
+    }
+
+    if (user.status === 'banned') {
+      return {
+        success: false,
+        message: 'حساب کاربری شما به دلیل تخلف امنیتی مسدود است و امکان پرداخت با اعتبار وجود ندارد.',
+      };
+    }
+
+    // 1. Check Cryptographic Signature & In-memory / Vault Integrity
+    const integrity = verifyUserCreditIntegrity(user);
+    if (!integrity.valid) {
+      banUserForTampering(
+        user.id,
+        'تلاش برای پرداخت با اعتبار جعلی یا دستکاری شده (DevTools / Inspect)',
+        integrity.reason
+      );
+      return {
+        success: false,
+        message: 'تلاش برای جعل اعتبار کیف پول شناسایی و حساب کاربری شما مسدود گردید.',
+      };
+    }
+
+    // 2. Authoritative Database Check against Supabase
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data: remoteUser, error: remoteErr } = await supabase
+          .from('users')
+          .select('id, rabia_credit, status')
+          .eq('id', user.id)
+          .single();
+
+        if (!remoteErr && remoteUser) {
+          if (remoteUser.status === 'banned') {
+            banUserForTampering(user.id, 'حساب کاربری در پایگاه داده سرور مسدود اعلام شده است.');
+            return {
+              success: false,
+              message: 'حساب کاربری شما مسدود است.',
+            };
+          }
+
+          const serverCredit = Number(remoteUser.rabia_credit || 0);
+          if (serverCredit < orderInput.totalAmount) {
+            // Check if local client inflated their credit
+            if (user.rabiaCredit > serverCredit) {
+              banUserForTampering(
+                user.id,
+                'مغایرت اعتبار با دیتابیس ابری (تلاش برای جعل با Inspect)',
+                `اعتبار ادعایی: ${user.rabiaCredit.toLocaleString('fa-IR')} تومان | اعتبار واقعی سرور: ${serverCredit.toLocaleString('fa-IR')} تومان`
+              );
+              return {
+                success: false,
+                message: 'جعل اعتبار شناسایی شد و حساب کاربری شما فوراً مسدود گردید.',
+              };
+            }
+
+            return {
+              success: false,
+              message: 'موجودی اعتبار حساب رابیا شما برای پرداخت این سفارش کافی نیست.',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Authoritative Supabase check error, fallback to signature:', err);
+      }
+    }
+
+    if (user.rabiaCredit < orderInput.totalAmount) {
       return {
         success: false,
         message: 'موجودی اعتبار حساب رابیا شما برای پرداخت این سفارش کافی نیست.',
