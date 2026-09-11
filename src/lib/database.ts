@@ -5,9 +5,19 @@ import { signAndProtectUser, verifyUserCreditIntegrity, banUserForTampering } fr
 
 export const USERS_KEY = 'rabia_users_data';
 const MENU_KEY = 'rabia_menu_data';
+const DELETED_MENU_KEY = 'rabia_deleted_menu_ids';
 const ORDERS_KEY = 'rabia_orders_data';
 const TRANSACTIONS_KEY = 'rabia_transactions_data';
 const BROADCAST_CHANNEL_NAME = 'rabia_cafe_realtime_bus';
+
+export function getDeletedMenuItemIds(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_MENU_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 // BroadcastChannel for cross-tab realtime sync
 let channel: BroadcastChannel | null = null;
@@ -289,8 +299,10 @@ export async function initSupabaseRealtimeSync() {
         { event: '*', schema: 'public', table: 'menu_items' },
         (payload: any) => {
           const items = getMenuItems();
+          const deletedIds = getDeletedMenuItemIds();
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const raw = payload.new;
+            if (deletedIds.includes(raw.id)) return;
             const incomingPrice = Number(raw.price);
             const idx = items.findIndex((i) => i.id === raw.id);
             
@@ -320,10 +332,16 @@ export async function initSupabaseRealtimeSync() {
             localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
             emitRealtimeEvent('menu_updated', item);
           } else if (payload.eventType === 'DELETE') {
-            const updated = items.filter((i) => i.id !== payload.old.id);
-            const sorted = sortMenuItemsStably(updated);
-            localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
-            emitRealtimeEvent('menu_updated', { id: payload.old.id, deleted: true });
+            if (payload.old?.id) {
+              if (!deletedIds.includes(payload.old.id)) {
+                deletedIds.push(payload.old.id);
+                localStorage.setItem(DELETED_MENU_KEY, JSON.stringify(deletedIds));
+              }
+              const updated = items.filter((i) => i.id !== payload.old.id);
+              const sorted = sortMenuItemsStably(updated);
+              localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
+              emitRealtimeEvent('menu_updated', { id: payload.old.id, deleted: true });
+            }
           }
         }
       )
@@ -362,21 +380,23 @@ export async function syncAllWithSupabase() {
           return {
             ...localItem,
             name: remote.name || localItem.name,
-            nameEn: remote.name_en !== undefined && remote.name_en !== null ? remote.name_en : localItem.nameEn,
+            nameEn: (remote.name_en && remote.name_en.trim()) ? remote.name_en : (localItem.nameEn || ''),
             category: remote.category || localItem.category,
             // Keep existing non-zero price if remote is 0 (from old seed)
             price: remotePrice > 0 ? remotePrice : (localItem.price > 0 ? localItem.price : 0),
-            description: remote.description !== undefined && remote.description !== null ? remote.description : localItem.description,
-            ingredients: remote.ingredients || localItem.ingredients,
+            description: (remote.description && remote.description.trim()) ? remote.description : (localItem.description || ''),
+            ingredients: (remote.ingredients && Array.isArray(remote.ingredients) && remote.ingredients.length > 0) ? remote.ingredients : (localItem.ingredients || []),
             image: remote.image || localItem.image,
             isAvailable: parseIsAvailable(remote.is_available),
             isFeatured: remote.is_featured !== undefined ? remote.is_featured : localItem.isFeatured,
           };
         });
 
-        // Add any newly created items that exist in DB but not in localMenu
+        const deletedIds = getDeletedMenuItemIds();
+
+        // Add any newly created items that exist in DB but not in localMenu (excluding deleted items)
         dbMenu.forEach((remote: any) => {
-          if (!localMenu.some((l) => l.id === remote.id)) {
+          if (!deletedIds.includes(remote.id) && !localMenu.some((l) => l.id === remote.id)) {
             merged.push({
               id: remote.id,
               name: remote.name,
@@ -392,7 +412,14 @@ export async function syncAllWithSupabase() {
           }
         });
 
-        const stablySorted = sortMenuItemsStably(merged);
+        // Also clean up any lingering deleted items from remote Supabase
+        const lingeringDeletedInDb = dbMenu.filter((r: any) => deletedIds.includes(r.id)).map((r: any) => r.id);
+        if (lingeringDeletedInDb.length > 0) {
+          supabase.from('menu_items').delete().in('id', lingeringDeletedInDb).then(() => {});
+        }
+
+        const filteredMerged = merged.filter((item) => !deletedIds.includes(item.id));
+        const stablySorted = sortMenuItemsStably(filteredMerged);
         localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
         emitRealtimeEvent('menu_updated');
       } else {
@@ -423,26 +450,54 @@ export async function syncAllWithSupabase() {
 // ---------------- MENU ITEMS ----------------
 export function getMenuItems(): MenuItem[] {
   try {
+    const deletedIds = getDeletedMenuItemIds();
+    const initialMap = new Map(INITIAL_MENU_ITEMS.map((init) => [init.id, init]));
     const data = localStorage.getItem(MENU_KEY);
     if (data) {
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = parsed.map((item: MenuItem) => ({
-          ...item,
-          isAvailable: parseIsAvailable(item.isAvailable),
-        }));
-        return sortMenuItemsStably(cleaned);
+      if (Array.isArray(parsed)) {
+        let hasEnriched = false;
+        const cleaned = parsed
+          .filter((item: MenuItem) => !deletedIds.includes(item.id))
+          .map((item: MenuItem) => {
+            const initial = initialMap.get(item.id);
+            const enrichedNameEn = (item.nameEn && item.nameEn.trim()) ? item.nameEn : (initial?.nameEn || '');
+            const enrichedDesc = (item.description && item.description.trim()) ? item.description : (initial?.description || '');
+            const enrichedIng = (item.ingredients && Array.isArray(item.ingredients) && item.ingredients.length > 0)
+              ? item.ingredients
+              : (initial?.ingredients || []);
+            
+            if (enrichedNameEn !== item.nameEn || enrichedDesc !== item.description || enrichedIng.length !== (item.ingredients?.length || 0)) {
+              hasEnriched = true;
+            }
+
+            return {
+              ...item,
+              nameEn: enrichedNameEn,
+              description: enrichedDesc,
+              ingredients: enrichedIng,
+              isAvailable: parseIsAvailable(item.isAvailable),
+            };
+          });
+        const sorted = sortMenuItemsStably(cleaned);
+        if (hasEnriched) {
+          localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
+        }
+        return sorted;
       }
     }
-    const cleanInitial = INITIAL_MENU_ITEMS.map((item) => ({
-      ...item,
-      isAvailable: parseIsAvailable(item.isAvailable),
-    }));
+    const cleanInitial = INITIAL_MENU_ITEMS
+      .filter((item) => !deletedIds.includes(item.id))
+      .map((item) => ({
+        ...item,
+        isAvailable: parseIsAvailable(item.isAvailable),
+      }));
     const sorted = sortMenuItemsStably(cleanInitial);
     localStorage.setItem(MENU_KEY, JSON.stringify(sorted));
     return sorted;
   } catch {
-    return sortMenuItemsStably(INITIAL_MENU_ITEMS);
+    const deletedIds = getDeletedMenuItemIds();
+    return sortMenuItemsStably(INITIAL_MENU_ITEMS.filter((item) => !deletedIds.includes(item.id)));
   }
 }
 
@@ -452,6 +507,11 @@ export async function saveMenuItem(item: MenuItem): Promise<MenuItem> {
     price: Number(item.price) >= 0 ? Number(item.price) : 0,
     isAvailable: parseIsAvailable(item.isAvailable),
   };
+
+  // Remove from deleted list if re-adding/saving
+  const deletedIds = getDeletedMenuItemIds().filter((id) => id !== cleanItem.id);
+  localStorage.setItem(DELETED_MENU_KEY, JSON.stringify(deletedIds));
+
   const items = getMenuItems();
   const index = items.findIndex((i) => i.id === cleanItem.id);
   if (index >= 0) {
@@ -540,7 +600,14 @@ export async function toggleMenuItemStock(itemId: string): Promise<boolean> {
   return false;
 }
 
-export function deleteMenuItem(itemId: string) {
+export function deleteMenuItem(itemId: string): boolean {
+  // Track permanently in deletedIds so remote sync does not resurrect it
+  const deletedIds = getDeletedMenuItemIds();
+  if (!deletedIds.includes(itemId)) {
+    deletedIds.push(itemId);
+    localStorage.setItem(DELETED_MENU_KEY, JSON.stringify(deletedIds));
+  }
+
   const items = getMenuItems().filter((i) => i.id !== itemId);
   const stablySorted = sortMenuItemsStably(items);
   localStorage.setItem(MENU_KEY, JSON.stringify(stablySorted));
@@ -556,6 +623,8 @@ export function deleteMenuItem(itemId: string) {
         if (error) console.error('Supabase delete item error:', error);
       });
   }
+
+  return true;
 }
 
 // ---------------- USERS ----------------

@@ -12,7 +12,11 @@ import {
   CupSoda, 
   Cake, 
   GlassWater, 
-  Utensils 
+  Utensils,
+  X,
+  Info,
+  Layers,
+  Leaf
 } from 'lucide-react';
 
 interface MenuSectionProps {
@@ -45,6 +49,20 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MenuCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
+
+  // Helper to separate general description and flavor notes (طعم‌یادها)
+  const parseDescriptionAndFlavors = (desc: string) => {
+    if (!desc) return { mainDesc: '', flavorNotes: '' };
+    const parts = desc.split(/طعم[‌ ]*یادها:\s*/);
+    if (parts.length > 1) {
+      return {
+        mainDesc: parts[0].trim(),
+        flavorNotes: parts[1].trim(),
+      };
+    }
+    return { mainDesc: desc.trim(), flavorNotes: '' };
+  };
 
   // Filter items
   const filteredItems = useMemo(() => {
@@ -75,13 +93,13 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-[#C87D55] mb-2">
             <span className="w-8 h-[2px] bg-[#C87D55]"></span>
-            <span>طعم‌های اختصاصی رابیا</span>
+            <span>طعم‌های اصیل و عطر خاطره‌انگیز</span>
           </div>
           <h2 className="text-2xl sm:text-4xl font-black text-[#FDFBF7]">
-            منوی اصیل کافه رابیا
+            منوی تخصصی کافه رابیا
           </h2>
           <p className="text-sm text-[#A8988C] mt-1 font-light">
-            کلیه نوشیدنی‌ها و دسرها با تازه‌ترین مواد اولیه روز آماده و سرو می‌شوند
+            همراه با نام انگلیسی، توضیحات جامع، طعم‌یادها و مواد تشکیل‌دهنده ارگانیک
           </p>
         </div>
 
@@ -91,7 +109,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="جستجوی نام یا مواد اولیه..."
+            placeholder="جستجوی نام، طعم‌یاد یا مواد اولیه..."
             className="w-full bg-[#1F1A18] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl py-2.5 pr-10 pl-4 text-xs sm:text-sm text-[#FDFBF7] placeholder-[#7F6F65] focus:outline-none transition-all shadow-inner"
           />
           <Search className="w-4 h-4 text-[#A8988C] absolute right-3.5 top-3" />
@@ -152,6 +170,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
         {filteredItems.map((item) => {
           const qty = getItemQuantity(item.id);
           const isOutOfStock = !parseIsAvailable(item.isAvailable);
+          const { mainDesc, flavorNotes } = parseDescriptionAndFlavors(item.description);
 
           return (
             <div
@@ -163,7 +182,11 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
               }`}
             >
               {/* 128x128 Item Image Container with Badges */}
-              <div className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden bg-[#241E1B] shrink-0 border border-[#C87D55]/25 shadow-md group-hover:border-[#C87D55]/60 transition-colors">
+              <div 
+                onClick={() => setDetailItem(item)}
+                className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden bg-[#241E1B] shrink-0 border border-[#C87D55]/25 shadow-md group-hover:border-[#C87D55]/60 transition-colors cursor-pointer"
+                title="برای مشاهده جزئیات کامل و طعم‌یادها کلیک کنید"
+              >
                 <img
                   src={item.image}
                   alt={item.name}
@@ -198,13 +221,17 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
               {/* Card Details & Actions */}
               <div className="flex-1 min-w-0 flex flex-col justify-between w-full">
                 <div>
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                  <div 
+                    onClick={() => setDetailItem(item)}
+                    className="flex items-start justify-between gap-2 mb-1 cursor-pointer"
+                    title="مشاهده جزئیات آیتم"
+                  >
                     <div className="min-w-0">
                       <h3 className="text-sm sm:text-base font-black text-[#FDFBF7] group-hover:text-[#F5D3C1] transition-colors line-clamp-1">
                         {item.name}
                       </h3>
                       {item.nameEn && (
-                        <p className="text-[10px] text-[#A8988C]/80 font-light truncate">
+                        <p className="text-[10px] text-[#A8988C]/80 font-light truncate tracking-wide" dir="ltr">
                           {item.nameEn}
                         </p>
                       )}
@@ -217,9 +244,25 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-xs text-[#B8A698] font-light line-clamp-2 leading-relaxed mb-2">
-                    {item.description}
-                  </p>
+                  {/* Main Description */}
+                  {mainDesc && (
+                    <p className="text-xs text-[#B8A698] font-light line-clamp-2 leading-relaxed mb-1.5">
+                      {mainDesc}
+                    </p>
+                  )}
+
+                  {/* Flavor Notes Highlight */}
+                  {flavorNotes && (
+                    <div 
+                      onClick={() => setDetailItem(item)}
+                      className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#E0946B] bg-[#291F1A]/80 border border-[#C87D55]/25 rounded-lg px-2 py-1 mb-2 leading-tight cursor-pointer hover:border-[#C87D55]/50 transition-colors"
+                    >
+                      <Sparkles className="w-3 h-3 text-[#E0946B] shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-[#F5D3C1] font-semibold">طعم‌یادها:</strong> {flavorNotes}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Ingredients Chips */}
                   {item.ingredients && item.ingredients.length > 0 && (
@@ -233,54 +276,234 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                         </span>
                       ))}
                       {item.ingredients.length > 3 && (
-                        <span className="text-[9px] px-1 py-0.5 text-[#A8988C]">
-                          +{item.ingredients.length - 3}
-                        </span>
+                        <button
+                          onClick={() => setDetailItem(item)}
+                          className="text-[9px] px-1.5 py-0.5 text-[#E0946B] hover:text-white transition-colors"
+                        >
+                          +{item.ingredients.length - 3} مورد
+                        </button>
                       )}
                     </div>
                   )}
                 </div>
 
                 {/* Bottom Action Area */}
-                <div className="mt-1 pt-1 border-t border-[#C87D55]/10">
-                  {isOutOfStock ? (
-                    <div className="w-full py-1.5 px-2 rounded-xl bg-rose-950/40 text-rose-300 text-[11px] font-bold text-center flex items-center justify-center gap-1.5 border border-rose-800/60 shadow-sm">
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      <span>اتمام موجودی</span>
-                    </div>
-                  ) : qty > 0 ? (
-                    <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/40 rounded-xl p-1">
+                <div className="mt-1 pt-2 border-t border-[#C87D55]/10 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDetailItem(item)}
+                    className="text-[10px] text-[#A8988C] hover:text-[#E0946B] flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                    title="مشاهده جزئیات کامل و طعم‌یادها"
+                  >
+                    <Info className="w-3 h-3" />
+                    <span>طعم‌یاد و مواد</span>
+                  </button>
+
+                  <div className="flex-1 max-w-[170px]">
+                    {isOutOfStock ? (
+                      <div className="w-full py-1.5 px-2 rounded-xl bg-rose-950/40 text-rose-300 text-[10px] font-bold text-center flex items-center justify-center gap-1 border border-rose-800/60 shadow-sm">
+                        <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
+                        <span>اتمام موجودی</span>
+                      </div>
+                    ) : qty > 0 ? (
+                      <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/40 rounded-xl p-1">
+                        <button
+                          onClick={() => onUpdateCartQuantity(item.id, 1)}
+                          className="w-6 h-6 rounded-lg copper-gradient text-white flex items-center justify-center font-bold hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-black text-[#FDFBF7] px-1">
+                          {qty}
+                        </span>
+                        <button
+                          onClick={() => onUpdateCartQuantity(item.id, -1)}
+                          className="w-6 h-6 rounded-lg bg-[#2F2723] text-[#E0946B] hover:bg-[#3D322D] flex items-center justify-center font-bold transition-all cursor-pointer"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => onUpdateCartQuantity(item.id, 1)}
-                        className="w-7 h-7 rounded-lg copper-gradient text-white flex items-center justify-center font-bold hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+                        onClick={() => onAddToCart(item)}
+                        className="w-full py-1.5 px-2.5 rounded-xl bg-[#241E1B] hover:bg-gradient-to-r hover:from-[#C87D55] hover:to-[#A85B35] text-[#FDFBF7] hover:text-white border border-[#C87D55]/30 hover:border-transparent text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm cursor-pointer"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-3 h-3 text-[#E0946B] group-hover:text-white" />
+                        <span>افزودن</span>
                       </button>
-                      <span className="text-xs font-black text-[#FDFBF7] px-2">
-                        {qty} عدد
-                      </span>
-                      <button
-                        onClick={() => onUpdateCartQuantity(item.id, -1)}
-                        className="w-7 h-7 rounded-lg bg-[#2F2723] text-[#E0946B] hover:bg-[#3D322D] flex items-center justify-center font-bold transition-all cursor-pointer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => onAddToCart(item)}
-                      className="w-full py-2 px-3 rounded-xl bg-[#241E1B] hover:bg-gradient-to-r hover:from-[#C87D55] hover:to-[#A85B35] text-[#FDFBF7] hover:text-white border border-[#C87D55]/30 hover:border-transparent text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-[#E0946B] group-hover:text-white" />
-                      <span>افزودن به سبد سفارش</span>
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Item Detail Modal */}
+      {detailItem && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl bg-[#181311] border border-[#C87D55]/40 p-5 sm:p-6 space-y-4 shadow-2xl">
+            <button
+              onClick={() => setDetailItem(null)}
+              className="absolute left-4 top-4 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white cursor-pointer z-10 transition-colors"
+              title="بستن پنجره"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header with Title & English Name */}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#C87D55]/20 text-[#E0946B] border border-[#C87D55]/30 text-[10px] font-bold">
+                  {CATEGORIES.find((c) => c.id === detailItem.category)?.label || detailItem.category}
+                </span>
+                {detailItem.isFeatured && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#C87D55] text-white text-[10px] font-black shadow-sm">
+                    پیشنهاد ویژه باریستا
+                  </span>
+                )}
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-[#FDFBF7] mt-1.5">
+                {detailItem.name}
+              </h3>
+              {detailItem.nameEn && (
+                <p className="text-xs sm:text-sm text-[#A8988C] font-normal tracking-wider mt-0.5" dir="ltr">
+                  {detailItem.nameEn}
+                </p>
+              )}
+            </div>
+
+            {/* Image & Price Banner */}
+            <div className="relative rounded-2xl overflow-hidden bg-[#241E1B] border border-[#C87D55]/30 shadow-lg">
+              <img
+                src={detailItem.image}
+                alt={detailItem.name}
+                className="w-full h-48 sm:h-56 object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-4">
+                <div>
+                  <span className="text-[10px] text-[#D8C7B8] block">قیمت آیتم:</span>
+                  <span className="text-lg sm:text-xl font-black text-[#E0946B]">
+                    {detailItem.price.toLocaleString('fa-IR')}
+                  </span>
+                  <span className="text-xs text-[#D8C7B8] mr-1">تومان</span>
+                </div>
+
+                <div>
+                  {parseIsAvailable(detailItem.isAvailable) ? (
+                    <span className="px-3 py-1 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs font-bold shadow-md">
+                      ✓ موجود در کافه
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-xl bg-rose-950/80 border border-rose-600/60 text-rose-300 text-xs font-bold shadow-md">
+                      ✗ اتمام موجودی
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Description Section */}
+            {(() => {
+              const { mainDesc, flavorNotes } = parseDescriptionAndFlavors(detailItem.description);
+              return (
+                <div className="space-y-3">
+                  {mainDesc && (
+                    <div className="p-3.5 rounded-2xl bg-[#221B17] border border-[#C87D55]/20">
+                      <h4 className="text-xs font-bold text-[#E0946B] mb-1 flex items-center gap-1.5">
+                        <Coffee className="w-3.5 h-3.5 text-[#C87D55]" />
+                        <span>توضیحات و مشخصات باریستا:</span>
+                      </h4>
+                      <p className="text-xs sm:text-sm text-[#D8C7B8] font-light leading-relaxed">
+                        {mainDesc}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Flavor Notes (طعم‌یادها) */}
+                  {flavorNotes && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#291F1A] to-[#201815] border border-[#C87D55]/40 shadow-inner">
+                      <h4 className="text-xs font-bold text-[#F5D3C1] mb-1.5 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#E0946B] animate-pulse" />
+                        <span>پروفایل و طعم‌یادها (Flavor Notes):</span>
+                      </h4>
+                      <p className="text-xs sm:text-sm text-[#E0946B] font-semibold leading-relaxed">
+                        {flavorNotes}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Ingredients (مواد تشکیل‌دهنده) */}
+                  {detailItem.ingredients && detailItem.ingredients.length > 0 && (
+                    <div className="p-3.5 rounded-2xl bg-[#221B17] border border-[#C87D55]/20">
+                      <h4 className="text-xs font-bold text-[#E0946B] mb-2 flex items-center gap-1.5">
+                        <Leaf className="w-3.5 h-3.5 text-[#C87D55]" />
+                        <span>مواد اولیه و تشکیل‌دهنده:</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detailItem.ingredients.map((ing, i) => (
+                          <span
+                            key={i}
+                            className="px-2.5 py-1 rounded-xl bg-[#2C231F] text-[#FDFBF7] text-xs border border-[#C87D55]/30 shadow-sm"
+                          >
+                            {ing}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Bottom Modal Actions */}
+            <div className="pt-3 border-t border-[#C87D55]/20 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setDetailItem(null)}
+                className="px-4 py-2.5 rounded-xl bg-[#241E1B] text-[#A8988C] hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                بستن
+              </button>
+
+              <div className="flex-1 max-w-[200px]">
+                {!parseIsAvailable(detailItem.isAvailable) ? (
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-rose-950/60 text-rose-300 text-xs font-bold text-center border border-rose-800/60 shadow-sm">
+                    اتمام موجودی
+                  </div>
+                ) : getItemQuantity(detailItem.id) > 0 ? (
+                  <div className="flex items-center justify-between bg-[#241E1B] border border-[#C87D55]/50 rounded-xl p-1.5 shadow-md">
+                    <button
+                      onClick={() => onUpdateCartQuantity(detailItem.id, 1)}
+                      className="w-8 h-8 rounded-lg copper-gradient text-white flex items-center justify-center font-bold hover:scale-105 active:scale-95 transition-all shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-black text-[#FDFBF7] px-2">
+                      {getItemQuantity(detailItem.id)} عدد
+                    </span>
+                    <button
+                      onClick={() => onUpdateCartQuantity(detailItem.id, -1)}
+                      className="w-8 h-8 rounded-lg bg-[#2F2723] text-[#E0946B] hover:bg-[#3D322D] flex items-center justify-center font-bold transition-all cursor-pointer"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => onAddToCart(detailItem)}
+                    className="w-full py-2.5 px-4 rounded-xl copper-gradient hover:opacity-95 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-[#C87D55]/30 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>افزودن به سبد</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

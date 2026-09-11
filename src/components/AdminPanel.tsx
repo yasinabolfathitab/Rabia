@@ -140,6 +140,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   });
   const [ingredientsText, setIngredientsText] = useState('');
 
+  // Menu Item Deletion, Filter and Feedback states
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
+  const [menuFeedback, setMenuFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategoryFilter, setMenuCategoryFilter] = useState<'all' | MenuCategory>('all');
+
   // Reports states
   const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [chartData, setChartData] = useState(getChartData('daily'));
@@ -272,6 +278,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const filteredOrders = orders.filter((o) => {
     if (orderFilter === 'all') return true;
     return o.status === orderFilter;
+  });
+
+  // Filtered menu items
+  const filteredMenuItems = menuItems.filter((it) => {
+    if (menuCategoryFilter !== 'all' && it.category !== menuCategoryFilter) return false;
+    if (menuSearch.trim()) {
+      const q = menuSearch.trim().toLowerCase();
+      const matchName = it.name.toLowerCase().includes(q);
+      const matchEn = it.nameEn ? it.nameEn.toLowerCase().includes(q) : false;
+      return matchName || matchEn;
+    }
+    return true;
   });
 
   const pendingUsers = users.filter((u) => u.status === 'pending');
@@ -412,6 +430,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
     await toggleMenuItemStock(itemId);
     refreshData();
     onMenuUpdated?.();
+  };
+
+  // Handle Menu Item Deletion
+  const handleConfirmDeleteItem = () => {
+    if (!itemToDelete) return;
+    const targetName = itemToDelete.name;
+    const targetId = itemToDelete.id;
+
+    // Optimistically update local state immediately
+    setMenuItems((prev) => prev.filter((it) => it.id !== targetId));
+
+    deleteMenuItem(targetId);
+    setItemToDelete(null);
+    setIsEditingItem(false);
+    refreshData();
+    onMenuUpdated?.();
+
+    setMenuFeedback({
+      success: true,
+      message: `آیتم «${targetName}» با موفقیت از منوی کافه رابیا حذف شد.`,
+    });
+    setTimeout(() => {
+      setMenuFeedback(null);
+    }, 4000);
   };
 
   // Handle local image file upload
@@ -768,9 +810,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 <div className="px-3.5 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                    <span>همگام‌سازی ابری فعال است؛ سفارشات مشتریان به‌صورت لحظه‌ای از گوشی دریافت می‌شوند.</span>
+                    <span>همگام‌سازی ابری فعال است؛ سفارشات مشتریان به‌صورت لحظه‌ای دریافت می‌شوند.</span>
                   </div>
-                  <span className="text-[10px] text-emerald-400/80 hidden sm:inline">Supabase Online</span>
+                  <span className="text-[10px] text-emerald-400/80 hidden sm:inline">Online</span>
                 </div>
               ) : (
                 <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
@@ -1349,12 +1391,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
           {/* TAB 4: MENU ITEMS MANAGEMENT */}
           {activeTab === 'menu' && (
             <div className="space-y-5 max-w-6xl mx-auto">
+              {/* Header */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-base font-black text-[#FDFBF7]">
-                  مدیریت آیتم‌های منوی کافه رابیا ({menuItems.length} آیتم)
-                </h3>
+                <div>
+                  <h3 className="text-base font-black text-[#FDFBF7]">
+                    مدیریت آیتم‌های منوی کافه رابیا ({menuItems.length} آیتم)
+                  </h3>
+                  <p className="text-[11px] text-[#A8988C] mt-0.5">
+                    امکان ویرایش قیمت، عکس، وضعیت موجودی و حذف قطعی آیتم‌ها
+                  </p>
+                </div>
 
                 <button
+                  id="admin-add-new-menu-item-btn"
                   onClick={() => {
                     setEditingItem({
                       name: '',
@@ -1369,105 +1418,180 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     setIngredientsText('');
                     setIsEditingItem(true);
                   }}
-                  className="px-4 py-2 rounded-xl copper-gradient text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 rounded-xl copper-gradient text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer hover:opacity-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span>افزودن آیتم جدید به منو</span>
                 </button>
               </div>
 
-              {/* Items Table / Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {menuItems.map((it) => (
-                  <div
-                    key={it.id}
-                    className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 flex flex-col justify-between gap-3 shadow-md"
+              {/* Toast Feedback Notification */}
+              {menuFeedback && (
+                <div
+                  className={`p-3.5 rounded-2xl flex items-center gap-2.5 text-xs font-bold transition-all animate-in fade-in duration-200 ${
+                    menuFeedback.success
+                      ? 'bg-emerald-950/80 text-emerald-200 border border-emerald-600/70 shadow-md'
+                      : 'bg-rose-950/80 text-rose-200 border border-rose-600/70 shadow-md'
+                  }`}
+                >
+                  {menuFeedback.success ? (
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span>{menuFeedback.message}</span>
+                </div>
+              )}
+
+              {/* Search & Category Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-3 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-[#C87D55] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={menuSearch}
+                    onChange={(e) => setMenuSearch(e.target.value)}
+                    placeholder="جستجوی نام فارسی یا انگلیسی آیتم منو..."
+                    className="w-full pl-8 pr-9 py-2 rounded-xl bg-[#241E1B] border border-[#C87D55]/30 text-white placeholder-[#A8988C]/60 text-xs focus:outline-none focus:border-[#C87D55]"
+                  />
+                  {menuSearch && (
+                    <button
+                      onClick={() => setMenuSearch('')}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 text-[#A8988C] hover:text-white"
+                      title="پاک کردن جستجو"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#A8988C] shrink-0">دسته‌بندی:</span>
+                  <select
+                    value={menuCategoryFilter}
+                    onChange={(e) => setMenuCategoryFilter(e.target.value as any)}
+                    className="py-2 px-3 rounded-xl bg-[#241E1B] border border-[#C87D55]/30 text-white text-xs focus:outline-none focus:border-[#C87D55] cursor-pointer"
                   >
-                    <div className="flex flex-col min-[380px]:flex-row gap-3.5 items-center min-[380px]:items-start">
-                      <div className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden border border-[#C87D55]/30 shrink-0 shadow-md bg-[#241E1B]">
-                        <img
-                          src={it.image}
-                          alt={it.name}
-                          width={128}
-                          height={128}
-                          className="w-[128px] h-[128px] object-cover"
-                        />
-                        {!parseIsAvailable(it.isAvailable) && (
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1">
-                            <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 px-2 py-0.5 rounded border border-rose-800">
-                              اتمام موجودی
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col justify-between w-full h-full">
-                        <div>
-                          <div className="flex items-start justify-between gap-1">
-                            <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
-                              {it.name}
-                            </h4>
-                            <span className="text-xs font-black text-[#E0946B] shrink-0">
-                              {it.price.toLocaleString('fa-IR')} ت
-                            </span>
-                          </div>
-                          {it.nameEn && (
-                            <p className="text-[10px] text-[#A8988C]/80 truncate">{it.nameEn}</p>
-                          )}
-                          <p className="text-[11px] text-[#A8988C] line-clamp-2 mt-1">
-                            {it.description}
-                          </p>
-                        </div>
-                        <div className="mt-2 text-[10px] text-[#C4B3A5]/60">
-                          دسته‌بندی: {CATEGORY_LABELS[it.category] || it.category}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stock Status Toggle & Edit/Delete */}
-                    <div className="flex items-center justify-between pt-2 border-t border-[#C87D55]/15">
-                      <button
-                        onClick={() => handleToggleStock(it.id)}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
-                          parseIsAvailable(it.isAvailable)
-                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/70 hover:bg-emerald-900/90'
-                            : 'bg-rose-950/80 text-rose-300 border border-rose-600/70 hover:bg-rose-900/90'
-                        }`}
-                        title={parseIsAvailable(it.isAvailable) ? 'کلیک کنید تا اتمام موجودی شود' : 'کلیک کنید تا موجود در منو شود'}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${parseIsAvailable(it.isAvailable) ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
-                        <span>{parseIsAvailable(it.isAvailable) ? '✓ موجود در منو' : '✗ اتمام موجودی'}</span>
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditingItem(it);
-                            setIngredientsText(it.ingredients ? it.ingredients.join('، ') : '');
-                            setIsEditingItem(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-[#241E1B] text-[#D8C7B8] hover:text-white"
-                          title="ویرایش آیتم"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`آیا از حذف آیتم "${it.name}" اطمینان دارید؟`)) {
-                              deleteMenuItem(it.id);
-                              refreshData();
-                              onMenuUpdated?.();
-                            }
-                          }}
-                          className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:text-rose-200"
-                          title="حذف آیتم"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    <option value="all">همه دسته‌ها ({menuItems.length})</option>
+                    {Object.entries(CATEGORY_LABELS).map(([catKey, catLabel]) => (
+                      <option key={catKey} value={catKey}>
+                        {catLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {/* Items Table / Cards */}
+              {filteredMenuItems.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 text-center space-y-3">
+                  <Coffee className="w-10 h-10 text-[#C87D55]/40 mx-auto" />
+                  <p className="text-xs text-[#A8988C] font-semibold">
+                    {menuSearch || menuCategoryFilter !== 'all'
+                      ? 'هیچ آیتمی با فیلتر یا عبارت جستجوی انتخابی یافت نشد.'
+                      : 'منوی کافه در حال حاضر هیچ آیتمی ندارد.'}
+                  </p>
+                  {(menuSearch || menuCategoryFilter !== 'all') && (
+                    <button
+                      onClick={() => {
+                        setMenuSearch('');
+                        setMenuCategoryFilter('all');
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-[#241E1B] text-[#E0946B] text-xs font-bold hover:bg-[#2D2420]"
+                    >
+                      نمایش همه آیتم‌ها
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredMenuItems.map((it) => (
+                    <div
+                      key={it.id}
+                      className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 flex flex-col justify-between gap-3 shadow-md"
+                    >
+                      <div className="flex flex-col min-[380px]:flex-row gap-3.5 items-center min-[380px]:items-start">
+                        <div className="relative w-[128px] h-[128px] min-w-[128px] min-h-[128px] max-w-[128px] max-h-[128px] rounded-2xl overflow-hidden border border-[#C87D55]/30 shrink-0 shadow-md bg-[#241E1B]">
+                          <img
+                            src={it.image}
+                            alt={it.name}
+                            width={128}
+                            height={128}
+                            className="w-[128px] h-[128px] object-cover"
+                          />
+                          {!parseIsAvailable(it.isAvailable) && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1">
+                              <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 px-2 py-0.5 rounded border border-rose-800">
+                                اتمام موجودی
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-between w-full h-full">
+                          <div>
+                            <div className="flex items-start justify-between gap-1">
+                              <h4 className="text-xs sm:text-sm font-bold text-[#FDFBF7] truncate">
+                                {it.name}
+                              </h4>
+                              <span className="text-xs font-black text-[#E0946B] shrink-0">
+                                {it.price.toLocaleString('fa-IR')} ت
+                              </span>
+                            </div>
+                            {it.nameEn && (
+                              <p className="text-[10px] text-[#A8988C]/80 truncate">{it.nameEn}</p>
+                            )}
+                            <p className="text-[11px] text-[#A8988C] line-clamp-2 mt-1">
+                              {it.description}
+                            </p>
+                          </div>
+                          <div className="mt-2 text-[10px] text-[#C4B3A5]/60">
+                            دسته‌بندی: {CATEGORY_LABELS[it.category] || it.category}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stock Status Toggle & Edit/Delete */}
+                      <div className="flex items-center justify-between pt-2 border-t border-[#C87D55]/15">
+                        <button
+                          onClick={() => handleToggleStock(it.id)}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                            parseIsAvailable(it.isAvailable)
+                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/70 hover:bg-emerald-900/90'
+                              : 'bg-rose-950/80 text-rose-300 border border-rose-600/70 hover:bg-rose-900/90'
+                          }`}
+                          title={parseIsAvailable(it.isAvailable) ? 'کلیک کنید تا اتمام موجودی شود' : 'کلیک کنید تا موجود در منو شود'}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${parseIsAvailable(it.isAvailable) ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                          <span>{parseIsAvailable(it.isAvailable) ? '✓ موجود در منو' : '✗ اتمام موجودی'}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            id={`edit-menu-item-${it.id}`}
+                            onClick={() => {
+                              setEditingItem(it);
+                              setIngredientsText(it.ingredients ? it.ingredients.join('، ') : '');
+                              setIsEditingItem(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-[#241E1B] text-[#D8C7B8] hover:text-white border border-transparent hover:border-[#C87D55]/40 transition-colors cursor-pointer"
+                            title="ویرایش آیتم"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            id={`delete-menu-item-${it.id}`}
+                            onClick={() => setItemToDelete(it)}
+                            className="p-1.5 rounded-lg bg-rose-950/60 text-rose-400 hover:bg-rose-900 hover:text-white border border-rose-800/60 transition-colors cursor-pointer shadow-sm"
+                            title={`حذف «${it.name}» از منو`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Add/Edit Modal */}
               {isEditingItem && (
@@ -1622,22 +1746,129 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                         </label>
                       </div>
 
-                      <div className="pt-3 flex gap-2">
-                        <button
-                          type="submit"
-                          className="flex-1 py-2.5 rounded-xl copper-gradient text-white font-bold text-xs shadow-md"
-                        >
-                          ذخیره آیتم در منو
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingItem(false)}
-                          className="px-4 py-2.5 rounded-xl bg-[#241E1B] text-[#A8988C]"
-                        >
-                          انصراف
-                        </button>
+                      <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#C87D55]/20">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="submit"
+                            id="admin-save-menu-item-btn"
+                            className="px-5 py-2.5 rounded-xl copper-gradient text-white font-bold text-xs shadow-md cursor-pointer hover:opacity-95"
+                          >
+                            ذخیره آیتم در منو
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingItem(false)}
+                            className="px-4 py-2.5 rounded-xl bg-[#241E1B] text-[#A8988C] hover:text-white text-xs font-semibold cursor-pointer"
+                          >
+                            انصراف
+                          </button>
+                        </div>
+
+                        {editingItem.id && (
+                          <button
+                            type="button"
+                            id={`modal-delete-item-${editingItem.id}`}
+                            onClick={() => {
+                              const fullItem =
+                                menuItems.find((i) => i.id === editingItem.id) ||
+                                (editingItem as MenuItem);
+                              setItemToDelete(fullItem);
+                            }}
+                            className="px-3.5 py-2.5 rounded-xl bg-rose-950/80 border border-rose-600/70 text-rose-300 hover:bg-rose-900 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                            title="حذف قطعی این آیتم از منو"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف این آیتم</span>
+                          </button>
+                        )}
                       </div>
                     </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Dedicated Item Deletion Confirmation Modal */}
+              {itemToDelete && (
+                <div className="fixed inset-0 z-60 overflow-y-auto flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+                  <div className="relative w-full max-w-md rounded-3xl bg-[#181311] border border-rose-600/60 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-150">
+                    <button
+                      onClick={() => setItemToDelete(null)}
+                      className="absolute left-4 top-4 p-2 rounded-full bg-[#241E1B] text-[#A8988C] hover:text-white cursor-pointer"
+                      title="بستن پنجره"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center gap-3 text-rose-400">
+                      <div className="w-11 h-11 rounded-2xl bg-rose-950/90 border border-rose-600/60 flex items-center justify-center shrink-0 shadow-inner">
+                        <Trash2 className="w-5 h-5 text-rose-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-black text-white">تأیید حذف آیتم از منو</h4>
+                        <p className="text-[11px] text-rose-300/80">
+                          این عملیات بلافاصله در دیتابیس و منوی سفارش ثبت می‌شود
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-[#221B17] border border-[#C87D55]/25 flex items-center gap-3">
+                      {itemToDelete.image ? (
+                        <img
+                          src={itemToDelete.image}
+                          alt={itemToDelete.name}
+                          className="w-14 h-14 rounded-xl object-cover border border-[#C87D55]/30 shrink-0 bg-[#1A1412]"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-xl bg-[#2D2420] border border-[#C87D55]/30 flex items-center justify-center shrink-0">
+                          <Coffee className="w-6 h-6 text-[#C87D55]" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h5 className="text-xs sm:text-sm font-bold text-white truncate">
+                          {itemToDelete.name}
+                        </h5>
+                        {itemToDelete.nameEn && (
+                          <p className="text-[10px] text-[#A8988C] truncate" dir="ltr">
+                            {itemToDelete.nameEn}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between mt-1 text-[11px]">
+                          <span className="text-[#A8988C] text-[10px]">
+                            {CATEGORY_LABELS[itemToDelete.category] || itemToDelete.category}
+                          </span>
+                          <span className="font-black text-[#E0946B]">
+                            {itemToDelete.price.toLocaleString('fa-IR')} تومان
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-[#D8C7B8] leading-relaxed">
+                      آیا مطمئن هستید که می‌خواهید آیتم{' '}
+                      <span className="font-black text-white underline decoration-rose-500">
+                        «{itemToDelete.name}»
+                      </span>{' '}
+                      را برای همیشه از منوی کافه رابیا حذف کنید؟
+                    </p>
+
+                    <div className="pt-2 flex items-center justify-end gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setItemToDelete(null)}
+                        className="px-4 py-2.5 rounded-xl bg-[#241E1B] text-[#A8988C] hover:text-white text-xs font-semibold cursor-pointer transition-colors"
+                      >
+                        انصراف
+                      </button>
+                      <button
+                        type="button"
+                        id="confirm-delete-menu-item-btn"
+                        onClick={handleConfirmDeleteItem}
+                        className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 shadow-lg shadow-rose-950/60 cursor-pointer transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>بله، حذف قطعی شود</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
