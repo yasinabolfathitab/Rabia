@@ -38,6 +38,11 @@ export function getSupabaseConfig(): { url: string; key: string } {
   savedUrl = (savedUrl || '').trim();
   savedKey = (savedKey || '').trim();
 
+  // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
+  if (savedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+    savedUrl = savedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+  }
+
   // If saved URL is invalid or malformed, purge it from storage safely
   if (savedUrl && !isValidSupabaseUrl(savedUrl)) {
     try {
@@ -56,8 +61,13 @@ export function getSupabaseConfig(): { url: string; key: string } {
 
 export function saveSupabaseConfig(url: string, key: string) {
   try {
-    const trimmedUrl = (url || '').trim();
+    let trimmedUrl = (url || '').trim();
     const trimmedKey = (key || '').trim();
+
+    // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
+    if (trimmedUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+      trimmedUrl = trimmedUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+    }
 
     if (trimmedUrl && isValidSupabaseUrl(trimmedUrl)) {
       localStorage.setItem(STORAGE_KEY_URL, trimmedUrl);
@@ -95,8 +105,13 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 export async function testSupabaseConnection(url?: string, key?: string): Promise<{ success: boolean; message: string; tablesFound?: boolean }> {
   try {
-    const testUrl = (url || getSupabaseConfig().url || '').trim();
+    let testUrl = (url || getSupabaseConfig().url || '').trim();
     const testKey = (key || getSupabaseConfig().key || '').trim();
+
+    // مسیردهی ترافیک از طریق پروکسی اختصاصی جدید
+    if (testUrl.includes('csoqhdjlnpxlhejfbcai.supabase.co')) {
+      testUrl = testUrl.replace('csoqhdjlnpxlhejfbcai.supabase.co', 'api.rabia-cafebakery.ir');
+    }
 
     if (!testUrl || !testKey) {
       return { success: false, message: 'آدرس پروژه یا کلید Anon وارد نشده است.' };
