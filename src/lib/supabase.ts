@@ -172,13 +172,7 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
   }
 }
 
-export const SUPABASE_SQL_SCHEMA = `-- ===============================================
--- کدهای SQL برای ساخت جداول و اتصال زنده در Supabase
--- کافه رابیا (Rabia Café Realtime Database)
--- این کدها را کپی کرده و در بخش SQL Editor پنل Supabase خود یک‌بار اجرا (Run) کنید.
--- ===============================================
-
--- 1. جدول کاربران (مشتریان کافه)
+export const SUPABASE_SQL_SCHEMA = `-- 1. جدول کاربران (مشتریان کافه)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -220,8 +214,16 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_method TEXT NOT NULL, -- rabia_credit, counter_pos
   status TEXT DEFAULT 'pending', -- pending, preparing, ready, delivered, cancelled
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  notes TEXT
+  notes TEXT,
+  estimated_prep_minutes INTEGER,
+  prep_started_at TIMESTAMPTZ,
+  estimated_ready_at TIMESTAMPTZ
 );
+
+-- ستون‌های تکمیلی زمان‌بندی سفارش (در صورتی که جدول قبلاً در دیتابیس ساخته شده باشد)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_prep_minutes INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prep_started_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_ready_at TIMESTAMPTZ;
 
 -- 4. جدول تراکنش‌های اعتبار حساب رابیا
 CREATE TABLE IF NOT EXISTS credit_transactions (
@@ -254,8 +256,20 @@ DROP POLICY IF EXISTS "Allow public full access credit_transactions" ON credit_t
 CREATE POLICY "Allow public full access credit_transactions" ON credit_transactions FOR ALL USING (true) WITH CHECK (true);
 
 -- فعال‌سازی انتشار بلادرنگ (Realtime Replication برای دریافت آنی سفارشات روی سیستم مدیریت)
-ALTER PUBLICATION supabase_realtime ADD TABLE orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE users;
-ALTER PUBLICATION supabase_realtime ADD TABLE menu_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE credit_transactions;
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOR t IN 
+        SELECT unnest(ARRAY['orders', 'users', 'menu_items', 'credit_transactions'])
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND tablename = t
+        ) THEN
+            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', t);
+        END IF;
+    END LOOP;
+END;
+$$;
 `;

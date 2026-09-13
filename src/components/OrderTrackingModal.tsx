@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   X, 
   Search, 
@@ -17,7 +17,10 @@ import {
   Flame,
   ArrowRight,
   Receipt,
-  RotateCcw
+  RotateCcw,
+  Truck,
+  Hourglass,
+  Bell
 } from 'lucide-react';
 import { Order, OrderStatus, User } from '../types';
 import { 
@@ -25,7 +28,8 @@ import {
   searchOrders, 
   fetchLiveOrder, 
   getRecentCustomerOrderNumbers,
-  subscribeRealtime 
+  subscribeRealtime,
+  updateOrderStatus
 } from '../lib/database';
 
 interface OrderTrackingModalProps {
@@ -51,6 +55,69 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Live countdown timer state (for preparing orders with estimatedReadyAt)
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const autoTransitionHandledRef = useRef<string | null>(null);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!isOpen || !activeOrder) {
+      setRemainingSeconds(null);
+      return;
+    }
+
+    // Reset autoTransition tracker if order changes or is not preparing
+    if (activeOrder.status !== 'preparing') {
+      setRemainingSeconds(null);
+      return;
+    }
+
+    if (!activeOrder.estimatedReadyAt) {
+      // If order is preparing but estimatedReadyAt wasn't set, default to 15 mins from prepStartedAt or createdAt
+      const baseTime = activeOrder.prepStartedAt ? new Date(activeOrder.prepStartedAt).getTime() : new Date(activeOrder.createdAt).getTime();
+      const defaultDurationMs = (activeOrder.estimatedPrepMinutes || 15) * 60 * 1000;
+      const targetTime = baseTime + defaultDurationMs;
+      const now = Date.now();
+      const diffSec = Math.max(0, Math.floor((targetTime - now) / 1000));
+      setRemainingSeconds(diffSec);
+    } else {
+      const targetTime = new Date(activeOrder.estimatedReadyAt).getTime();
+      const now = Date.now();
+      const diffSec = Math.max(0, Math.floor((targetTime - now) / 1000));
+      setRemainingSeconds(diffSec);
+    }
+
+    const interval = setInterval(() => {
+      if (!activeOrder || activeOrder.status !== 'preparing') {
+        clearInterval(interval);
+        return;
+      }
+
+      const targetTime = activeOrder.estimatedReadyAt 
+        ? new Date(activeOrder.estimatedReadyAt).getTime() 
+        : (activeOrder.prepStartedAt ? new Date(activeOrder.prepStartedAt).getTime() : new Date(activeOrder.createdAt).getTime()) + (activeOrder.estimatedPrepMinutes || 15) * 60 * 1000;
+
+      const now = Date.now();
+      const diff = Math.floor((targetTime - now) / 1000);
+
+      if (diff <= 0) {
+        setRemainingSeconds(0);
+        clearInterval(interval);
+
+        // Auto-transition to 'ready' stage when timer ends:
+        // "سپس وقتی تایمر تموم شد ، به صورت خودکار بره مرحله بعد و بزنه پیک در مسیر شماست"
+        if (autoTransitionHandledRef.current !== activeOrder.id) {
+          autoTransitionHandledRef.current = activeOrder.id;
+          updateOrderStatus(activeOrder.id, 'ready');
+        }
+      } else {
+        setRemainingSeconds(diff);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, activeOrder?.id, activeOrder?.status, activeOrder?.estimatedReadyAt, activeOrder?.prepStartedAt, activeOrder?.estimatedPrepMinutes]);
 
   // Load recent orders and initial order
   useEffect(() => {
@@ -177,6 +244,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const currentStage = activeOrder ? getStageIndex(activeOrder.status) : 0;
   const isCancelled = activeOrder?.status === 'cancelled';
 
+  const isTakeaway = activeOrder?.orderType === 'takeaway';
+
   const stages = [
     {
       step: 0,
@@ -192,9 +261,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     },
     {
       step: 2,
-      title: 'آماده تحویل',
-      subtitle: 'آماده جهت دریافت در سالن یا تحویل به پیک',
-      icon: Sparkles,
+      title: isTakeaway ? 'پیک در مسیر شماست' : 'آماده تحویل در سالن',
+      subtitle: isTakeaway 
+        ? 'سفارش آماده شده و پیک در مسیر تحویل به آدرس شماست' 
+        : 'سفارش آماده است و توسط سالن‌کار روی میز شما قرار می‌گیرد',
+      icon: isTakeaway ? Truck : Sparkles,
     },
     {
       step: 3,
@@ -381,6 +452,71 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   </div>
                 </div>
 
+                {/* Countdown Timer Banner for Preparing Orders */}
+                {activeOrder.status === 'preparing' && remainingSeconds !== null && (
+                  <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-[#2A180E] via-[#24150D] to-[#1F120A] border-2 border-[#C87D55]/60 shadow-lg relative overflow-hidden animate-in fade-in duration-300">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#C87D55]/15 rounded-full blur-2xl pointer-events-none"></div>
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
+                      <div className="flex items-center gap-3 text-right">
+                        <div className="w-12 h-12 rounded-xl copper-gradient flex items-center justify-center text-white shadow-md shadow-[#C87D55]/40 shrink-0">
+                          <Hourglass className="w-6 h-6 animate-pulse" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#E0946B] font-bold">زمان تخمینی آماده‌سازی</span>
+                            <span className="flex h-2 w-2 relative">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E0946B] opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E0946B]"></span>
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#D8C7B8] font-medium mt-0.5">
+                            سفارش شما توسط باریستا در حال تهیه است و به زودی تحویل داده می‌شود
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Countdown Display Box */}
+                      <div className="flex items-center gap-2 bg-[#17110E]/90 border border-[#C87D55]/40 px-4 py-2 rounded-xl shrink-0 shadow-inner">
+                        <Clock className="w-4 h-4 text-[#E0946B]" />
+                        <div className="text-center">
+                          <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-[#FDFBF7]">
+                            {Math.floor(remainingSeconds / 60).toString().padStart(2, '0')}:{(remainingSeconds % 60).toString().padStart(2, '0')}
+                          </span>
+                          <span className="text-[10px] text-[#A8988C] block font-light">
+                            دقیقه تا آماده‌سازی
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stage 2 Alert: Courier in Transit / Ready for Pickup */}
+                {activeOrder.status === 'ready' && (
+                  <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-[#122A1C] via-[#0E2217] to-[#0A1A12] border-2 border-emerald-500/50 shadow-lg relative overflow-hidden animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/30 shrink-0">
+                          {isTakeaway ? <Truck className="w-6 h-6 animate-bounce" /> : <Sparkles className="w-6 h-6" />}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-emerald-300">
+                            {isTakeaway ? 'پیک در مسیر شماست!' : 'سفارش شما آماده تحویل است!'}
+                          </h4>
+                          <p className="text-xs text-emerald-100/80 font-light mt-0.5">
+                            {isTakeaway
+                              ? 'سفارش آماده شده و به پیک کافه تحویل گردید تا به آدرس شما برسد.'
+                              : 'سفارش آماده است و می‌توانید آن را از بار کافه یا روی میز تحویل بگیرید.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg bg-emerald-900/60 border border-emerald-400/40 text-emerald-300 text-xs font-bold shrink-0">
+                        {isTakeaway ? 'در حال ارسال' : 'آماده سالن'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Main Progress Stepper */}
                 {isCancelled ? (
                   <div className="py-6 text-center space-y-2">
@@ -482,7 +618,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                     <span>
                       {currentStage === 0 && 'سفارش در نوبت دم‌آوری و پردازش سیستم قرار دارد.'}
                       {currentStage === 1 && 'باریستای کافه رابیا هم‌اکنون در حال آماده‌سازی و دیزاین سفارش شماست.'}
-                      {currentStage === 2 && 'سفارش آماده است؛ می‌توانید از بار کافه تحویل بگیرید یا منتظر تحویل سالن/پیک باشید.'}
+                      {currentStage === 2 && (isTakeaway ? 'سفارش آماده شده و پیک در مسیر شماست.' : 'سفارش آماده است و برای سرو در سالن تحویل داده می‌شود.')}
                       {currentStage === 3 && 'سفارش با موفقیت تحویل داده شد. اوقات خوشی در رابیا برای شما آرزومندیم.'}
                       {isCancelled && 'سفارش لغو شده است.'}
                     </span>

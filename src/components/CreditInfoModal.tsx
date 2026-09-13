@@ -43,9 +43,9 @@ export const CreditInfoModal: React.FC<CreditInfoModalProps> = ({
               1
             </div>
             <div>
-              <strong className="text-[#FDFBF7] block mb-0.5">کارت‌کشیدن در کافه</strong>
+              <strong className="text-[#FDFBF7] block mb-0.5">پرداخت نقدی</strong>
               <span>
-                هر زمان که به صورت حضوری تشریف می‌آورید و هر مبلغی کارت می‌کشید، مدیریت کافه می‌تواند به همان مقدار یا بیشتر، حسابتان را شارژ کند.
+                هر زمان که به صورت حضوری تشریف می‌آورید و پرداخت نقدی انجام می‌دهید، مدیریت کافه می‌تواند به همان مقدار یا بیشتر، حسابتان را شارژ کند.
               </span>
             </div>
           </div>

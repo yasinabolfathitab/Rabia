@@ -6,8 +6,6 @@ import {
   Minus, 
   ShoppingBag, 
   MapPin, 
-  Utensils, 
-  CreditCard, 
   Wallet, 
   AlertTriangle, 
   CheckCircle2, 
@@ -15,7 +13,7 @@ import {
   ArrowLeft 
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { CartItem, OrderType, PaymentMethod, User, Order } from '../types';
+import { CartItem, PaymentMethod, User, Order } from '../types';
 import { createOrder, getMenuItems, parseIsAvailable } from '../lib/database';
 
 interface CartDrawerProps {
@@ -49,12 +47,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onOpenAuth,
   onOrderSuccess,
 }) => {
-  const [orderType, setOrderType] = useState<OrderType>('takeaway');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('rabia_credit');
+  const paymentMethod: PaymentMethod = 'rabia_credit';
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [tableNumber, setTableNumber] = useState('میز شماره 1');
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -108,27 +104,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
-    if (orderType === 'takeaway' && !deliveryAddress.trim()) {
-      setErrorMessage('برای سفارش بیرون‌بر، وارد کردن آدرس تحویل الزامی است.');
+    if (!deliveryAddress.trim()) {
+      setErrorMessage('برای سفارش بیرون‌بر، وارد کردن آدرس دقیق تحویل الزامی است.');
       return;
     }
 
-    if (user?.status === 'banned') {
-      setErrorMessage('حساب کاربری شما به دلیل تخلف امنیتی مسدود شده است و امکان ثبت سفارش وجود ندارد.');
+    if (!user) {
+      setErrorMessage('ثبت سفارش تنها با اعتبار حساب رابیا امکان‌پذیر است. لطفاً ابتدا وارد حساب کاربری خود شوید.');
       return;
     }
 
-    if (paymentMethod === 'rabia_credit') {
-      if (!user) {
-        setErrorMessage('برای استفاده از اعتبار حساب رابیا، لطفاً ابتدا وارد حساب کاربری خود شوید.');
-        return;
-      }
-      if (!hasEnoughRabiaCredit) {
-        setErrorMessage(
-          `موجودی اعتبار رابیا شما (${user.rabiaCredit.toLocaleString('en-US')} تومان) کمتر از مبلغ کل سفارش است. لطفاً گزینه کارت‌کشیدن در صندوق را انتخاب کنید یا حسابتان را شارژ نمایید.`
-        );
-        return;
-      }
+    if (!hasEnoughRabiaCredit) {
+      setErrorMessage(
+        `موجودی اعتبار رابیا شما (${user.rabiaCredit.toLocaleString('en-US')} تومان) کمتر از مبلغ کل سفارش (${totalAmount.toLocaleString('en-US')} تومان) است. لطفاً حسابتان را شارژ نمایید.`
+      );
+      return;
     }
 
     setIsSubmitting(true);
@@ -145,9 +135,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         userId: user?.id,
         userName: customerName.trim(),
         userPhone: customerPhone.trim(),
-        orderType,
-        address: orderType === 'takeaway' ? deliveryAddress.trim() : undefined,
-        tableNumber: orderType === 'dine_in' ? tableNumber : undefined,
+        orderType: 'takeaway',
+        address: deliveryAddress.trim(),
         items: orderItems,
         totalAmount,
         paymentMethod,
@@ -310,38 +299,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {cart.length > 0 && (
             <form onSubmit={handleCheckout} className="space-y-5 pt-2">
-              {/* Order Type Switcher (Takeaway vs Dine-In) */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-[#E5D7CD] flex items-center gap-1.5">
-                  <span>نوع دریافت سفارش:</span>
-                  <span className="text-rose-400">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setOrderType('takeaway')}
-                    className={`py-3 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      orderType === 'takeaway'
-                        ? 'copper-gradient text-white border-[#E0946B] shadow-md shadow-[#C87D55]/20'
-                        : 'bg-[#1D1815] text-[#C4B3A5] border-[#C87D55]/20 hover:bg-[#251F1C]'
-                    }`}
-                  >
-                    <MapPin className="w-4 h-4" />
-                    <span>سفارش بیرون‌بر</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setOrderType('dine_in')}
-                    className={`py-3 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      orderType === 'dine_in'
-                        ? 'copper-gradient text-white border-[#E0946B] shadow-md shadow-[#C87D55]/20'
-                        : 'bg-[#1D1815] text-[#C4B3A5] border-[#C87D55]/20 hover:bg-[#251F1C]'
-                    }`}
-                  >
-                    <Utensils className="w-4 h-4" />
-                    <span>سرو در داخل سالن</span>
-                  </button>
+              {/* Order Type Badge */}
+              <div className="p-3 rounded-2xl bg-[#1E1917] border border-[#C87D55]/30 flex items-center gap-2.5 text-xs">
+                <div className="w-7 h-7 rounded-xl bg-[#C87D55]/20 text-[#E0946B] flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-[#FDFBF7] block">سفارش و تحویل بیرون‌بر</span>
+                  <span className="text-[11px] text-[#A8988C]">آماده‌سازی تازه و بسته‌بندی ویژه کافه رابیا</span>
                 </div>
               </div>
 
@@ -388,48 +353,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
                 </div>
 
-                {/* Conditional Address or Table */}
-                {orderType === 'takeaway' ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] text-[#A8988C]">
-                        آدرس دقیق جهت ارسال بیرون‌بر
-                      </label>
-                      {user?.address && (
-                        <span className="text-[10px] text-emerald-400">
-                          (بارگذاری شده از پروفایل شما)
-                        </span>
-                      )}
-                    </div>
-                    <textarea
-                      rows={2}
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="تهران، خیابان، کوچه، پلاک، واحد..."
-                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl p-2.5 text-xs text-[#FDFBF7] focus:outline-none leading-relaxed"
-                    />
+                {/* Delivery Address */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-[#A8988C]">
+                      آدرس دقیق جهت ارسال بیرون‌بر
+                    </label>
+                    {user?.address && (
+                      <span className="text-[10px] text-emerald-400">
+                        (بارگذاری شده از پروفایل شما)
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <div>
-                    <label className="text-[11px] text-[#A8988C] block mb-1">شماره یا نام میز</label>
-                    <select
-                      value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value)}
-                      className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 py-2 text-xs text-[#FDFBF7] focus:outline-none"
-                    >
-                      <option value="میز شماره 1">میز شماره 1</option>
-                      <option value="میز شماره 2">میز شماره 2</option>
-                      <option value="میز شماره 3">میز شماره 3</option>
-                      <option value="میز شماره 4">میز شماره 4</option>
-                      <option value="میز شماره 5">میز شماره 5</option>
-                      <option value="میز شماره 6">میز شماره 6</option>
-                      <option value="میز شماره 7">میز شماره 7</option>
-                      <option value="میز شماره 8">میز شماره 8</option>
-                      <option value="میز شماره 9">میز شماره 9</option>
-                      <option value="میز شماره 10">میز شماره 10</option>
-                    </select>
-                  </div>
-                )}
+                  <textarea
+                    rows={2}
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="تهران، خیابان، کوچه، پلاک، واحد..."
+                    className="w-full bg-[#241E1B] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl p-2.5 text-xs text-[#FDFBF7] focus:outline-none leading-relaxed"
+                  />
+                </div>
 
                 {/* Notes */}
                 <div>
@@ -444,97 +387,83 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Payment Method Selector */}
+              {/* Payment Method - Exclusive to Rabia Credit */}
               <div className="space-y-2.5">
-                <label className="text-xs font-bold text-[#E5D7CD]">نحوه پرداخت:</label>
+                <label className="text-xs font-bold text-[#E5D7CD] flex items-center justify-between">
+                  <span>روش پرداخت:</span>
+                  <span className="text-[11px] font-normal text-[#E0946B]">تنها با اعتبار رابیا</span>
+                </label>
                 
-                <div className="space-y-2">
-                  {/* Option 1: Rabia Credit */}
-                  <div
-                    onClick={() => setPaymentMethod('rabia_credit')}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                      paymentMethod === 'rabia_credit'
-                        ? 'bg-[#221B17] border-[#C87D55] shadow-md shadow-[#C87D55]/15'
-                        : 'bg-[#1D1815] border-[#C87D55]/20 hover:bg-[#241D19]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl copper-gradient text-white flex items-center justify-center">
-                          <Wallet className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-[#FDFBF7]">
-                            خرید با اعتبار حساب رابیا
-                          </div>
-                          <div className="text-[11px] text-[#A8988C]">
-                            کسر آنی از شارژ هدیه و کیف‌پول شما
-                          </div>
-                        </div>
+                <div className="p-4 rounded-2xl bg-[#221B17] border border-[#C87D55]/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl copper-gradient text-white flex items-center justify-center shrink-0 shadow-md shadow-[#C87D55]/20">
+                        <Wallet className="w-5 h-5" />
                       </div>
-
-                      <div className="w-5 h-5 rounded-full border border-[#C87D55] flex items-center justify-center">
-                        {paymentMethod === 'rabia_credit' && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#C87D55]"></div>
-                        )}
+                      <div>
+                        <div className="text-xs font-bold text-[#FDFBF7]">
+                          خرید با اعتبار حساب رابیا
+                        </div>
+                        <div className="text-[11px] text-[#A8988C]">
+                          کسر آنی و خودکار از موجودی حساب رابیا
+                        </div>
                       </div>
                     </div>
 
-                    {/* Credit balance display */}
-                    <div className="mt-3 pt-2.5 border-t border-[#C87D55]/15 flex items-center justify-between text-xs">
-                      <span className="text-[#A8988C]">موجودی فعلی اعتبار رابیا:</span>
-                      {user ? (
-                        <span
-                          className={`font-black ${
-                            hasEnoughRabiaCredit ? 'text-emerald-400' : 'text-amber-400'
-                          }`}
-                        >
-                          {user.rabiaCredit.toLocaleString('en-US')} تومان
-                        </span>
-                      ) : (
-                        <span className="text-[#E0946B]">نیازمند ورود به حساب</span>
-                      )}
+                    <div className="w-5 h-5 rounded-full border border-[#C87D55] flex items-center justify-center bg-[#C87D55]/20">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#C87D55]"></div>
                     </div>
+                  </div>
 
-                    {user && !hasEnoughRabiaCredit && (
-                      <div className="mt-2 text-[11px] text-amber-300 flex items-center gap-1.5 bg-amber-950/40 p-2 rounded-lg border border-amber-800/50">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>اعتبار شما کمتر از مبلغ سفارش است. پرداخت حضوری در صندوق را انتخاب کنید.</span>
-                      </div>
+                  {/* Credit balance display */}
+                  <div className="pt-2.5 border-t border-[#C87D55]/15 flex items-center justify-between text-xs">
+                    <span className="text-[#A8988C]">موجودی اعتبار حساب شما:</span>
+                    {user ? (
+                      <span
+                        className={`font-black ${
+                          hasEnoughRabiaCredit ? 'text-emerald-400' : 'text-amber-400'
+                        }`}
+                      >
+                        {user.rabiaCredit.toLocaleString('en-US')} تومان
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onOpenAuth}
+                        className="text-[11px] font-bold text-[#E0946B] hover:underline"
+                      >
+                        ورود به حساب / ثبت‌نام
+                      </button>
                     )}
                   </div>
 
-                  {/* Option 2: POS at Counter */}
-                  <div
-                    onClick={() => setPaymentMethod('counter_pos')}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                      paymentMethod === 'counter_pos'
-                        ? 'bg-[#221B17] border-[#C87D55] shadow-md shadow-[#C87D55]/15'
-                        : 'bg-[#1D1815] border-[#C87D55]/20 hover:bg-[#241D19]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-[#2D2420] text-[#E0946B] flex items-center justify-center">
-                          <CreditCard className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-[#FDFBF7]">
-                            کارت‌کشیدن حضوری در صندوق
-                          </div>
-                          <div className="text-[11px] text-[#A8988C]">
-                            پرداخت توسط کارتخوان کافه هنگام تحویل
-                          </div>
-                        </div>
+                  {!user && (
+                    <div className="text-[11px] text-amber-300 flex items-center justify-between bg-amber-950/40 p-2.5 rounded-xl border border-amber-800/50">
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>جهت پرداخت با اعتبار، ورود به حساب الزامی است.</span>
                       </div>
-
-                      <div className="w-5 h-5 rounded-full border border-[#C87D55] flex items-center justify-center">
-                        {paymentMethod === 'counter_pos' && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#C87D55]"></div>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={onOpenAuth}
+                        className="px-2.5 py-1 rounded-lg copper-gradient text-white text-[10px] font-bold shrink-0"
+                      >
+                        ورود
+                      </button>
                     </div>
-                  </div>
+                  )}
+
+                  {user && !hasEnoughRabiaCredit && (
+                    <div className="text-[11px] text-amber-300 space-y-1 bg-amber-950/40 p-2.5 rounded-xl border border-amber-800/50">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>کسری اعتبار: {(totalAmount - user.rabiaCredit).toLocaleString('en-US')} تومان</span>
+                      </div>
+                      <p className="text-[10px] text-amber-200/80 leading-relaxed pr-5">
+                        موجودی اعتبار شما کمتر از مبلغ سفارش است. لطفاً نسبت به شارژ حساب خود اقدام فرمایید.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -557,26 +486,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span className="text-emerald-400 font-semibold">رایگان (مهمان کافه)</span>
                 </div>
                 <div className="pt-2 border-t border-[#C87D55]/20 flex justify-between text-sm sm:text-base font-black text-[#FDFBF7]">
-                  <span>مبلغ نهایی قابل پرداخت:</span>
+                  <span>مبلغ نهایی قابل کسر از اعتبار:</span>
                   <span className="text-[#E0946B]">{totalAmount.toLocaleString('en-US')} تومان</span>
                 </div>
               </div>
 
               {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3.5 px-6 rounded-2xl copper-gradient text-white font-black text-sm shadow-xl shadow-[#C87D55]/30 hover:shadow-[#C87D55]/50 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <span>در حال ثبت در سیستم رابیا...</span>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-[#FDFBF7]" />
-                    <span>تایید نهایی و ثبت فوری سفارش</span>
-                  </>
-                )}
-              </button>
+              {!user ? (
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className="w-full py-3.5 px-6 rounded-2xl copper-gradient text-white font-black text-sm shadow-xl shadow-[#C87D55]/30 hover:shadow-[#C87D55]/50 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-[#FDFBF7]" />
+                  <span>ورود به حساب جهت پرداخت با اعتبار رابیا</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !hasEnoughRabiaCredit}
+                  className="w-full py-3.5 px-6 rounded-2xl copper-gradient text-white font-black text-sm shadow-xl shadow-[#C87D55]/30 hover:shadow-[#C87D55]/50 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <span>در حال کسر اعتبار و ثبت سفارش...</span>
+                  ) : !hasEnoughRabiaCredit ? (
+                    <span>اعتبار رابیا کافی نیست (نیاز به شارژ)</span>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-[#FDFBF7]" />
+                      <span>تایید نهایی و پرداخت با اعتبار رابیا</span>
+                    </>
+                  )}
+                </button>
+              )}
             </form>
           )}
         </div>

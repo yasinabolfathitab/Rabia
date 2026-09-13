@@ -72,6 +72,9 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   notes?: string;
+  estimatedPrepMinutes?: number;
+  prepStartedAt?: string;
+  estimatedReadyAt?: string;
 }
 
 export interface CreditTransaction {

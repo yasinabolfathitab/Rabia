@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShoppingBag, 
   Users, 
@@ -25,6 +25,7 @@ import {
   Copy, 
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   TrendingUp,
   RefreshCw,
   Lock,
@@ -38,7 +39,8 @@ import {
   AlertTriangle,
   Bell,
   Volume2,
-  Wifi
+  Wifi,
+  Calendar
 } from 'lucide-react';
 import { playOrderAlertSound } from '../lib/sound';
 import {
@@ -80,6 +82,8 @@ import {
   initSupabaseRealtimeSync,
   syncAllWithSupabase,
   exportFullDatabaseBackup,
+  exportDailyDatabaseBackup,
+  getTodayBackupStats,
   importFullDatabaseBackup,
   clearAllOrders,
   clearAllUsers,
@@ -101,6 +105,56 @@ const CATEGORY_LABELS: Record<string, string> = {
   refresher: 'رفرشر',
 };
 
+const AdminOrderTimer: React.FC<{ order: Order }> = ({ order }) => {
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    if (order.status !== 'preparing') return;
+
+    const calcRemaining = () => {
+      const targetTime = order.estimatedReadyAt 
+        ? new Date(order.estimatedReadyAt).getTime() 
+        : (order.prepStartedAt ? new Date(order.prepStartedAt).getTime() : new Date(order.createdAt).getTime()) + (order.estimatedPrepMinutes || 15) * 60 * 1000;
+      
+      const now = Date.now();
+      return Math.max(0, Math.floor((targetTime - now) / 1000));
+    };
+
+    setRemainingSeconds(calcRemaining());
+
+    const interval = setInterval(() => {
+      const diff = calcRemaining();
+      setRemainingSeconds(diff);
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [order.id, order.status, order.estimatedReadyAt, order.prepStartedAt, order.estimatedPrepMinutes, order.createdAt]);
+
+  if (order.status !== 'preparing') return null;
+
+  const mins = Math.floor(remainingSeconds / 60);
+  const secs = remainingSeconds % 60;
+  const isUrgent = remainingSeconds < 60 && remainingSeconds > 0;
+
+  return (
+    <span className={`text-[11px] font-bold border px-2 py-0.5 rounded-md flex items-center gap-1 ${
+      remainingSeconds <= 0 
+        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40' 
+        : isUrgent 
+          ? 'bg-rose-950/60 text-rose-300 border-rose-800/40 animate-pulse'
+          : 'bg-sky-950/60 text-sky-300 border-sky-800/40'
+    }`}>
+      <Clock className="w-3 h-3" />
+      <span dir="ltr">
+        {remainingSeconds <= 0 ? 'آماده' : `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`}
+      </span>
+    </span>
+  );
+};
+
 interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -118,10 +172,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [orderFilter, setOrderFilter] = useState<'all' | OrderStatus>('all');
 
   // Credit Tab states
+  const [isCreditUnlocked, setIsCreditUnlocked] = useState(false);
+  const [creditPin, setCreditPin] = useState('');
+  const [creditPinError, setCreditPinError] = useState(false);
   const [searchPhone, setSearchPhone] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [chargeAmount, setChargeAmount] = useState<string>('');
-  const [chargeNote, setChargeNote] = useState<string>('شارژ کارت‌خوان صندوق رابیا');
+  const [chargeNote, setChargeNote] = useState<string>('شارژ با پرداخت نقدی در کافه');
   const [deductAmount, setDeductAmount] = useState<string>('');
   const [deductNote, setDeductNote] = useState<string>('سفارش حضوری در کافه');
   const [creditFeedback, setCreditFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -177,6 +234,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [purgeResult, setPurgeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showPurgeMenu, setShowPurgeMenu] = useState(false);
 
+  // Daily Exit Backup Modal states (پرسش از مدیر هنگام خروج از پنل برای بک‌آپ روزانه)
+  const [showExitBackupConfirm, setShowExitBackupConfirm] = useState(false);
+  const [todayBackupStats, setTodayBackupStats] = useState<ReturnType<typeof getTodayBackupStats> | null>(null);
+  const [backupDownloadSuccess, setBackupDownloadSuccess] = useState(false);
+  const [downloadedFileName, setDownloadedFileName] = useState('');
+
+  // Order Prep Time Modal states (تعیین زمان آماده‌سازی هنگام تایید سفارش)
+  const [orderToPrepare, setOrderToPrepare] = useState<Order | null>(null);
+  const [selectedPrepMinutes, setSelectedPrepMinutes] = useState<number>(15);
+  const [customPrepMinutes, setCustomPrepMinutes] = useState<string>('');
+
+  const handleRequestExit = () => {
+    const stats = getTodayBackupStats();
+    setTodayBackupStats(stats);
+    setBackupDownloadSuccess(false);
+    setDownloadedFileName('');
+    setShowExitBackupConfirm(true);
+  };
+
+  const handleConfirmExitWithBackup = () => {
+    const result = exportDailyDatabaseBackup();
+    setDownloadedFileName(result.fileName);
+    setBackupDownloadSuccess(true);
+    setTimeout(() => {
+      setShowExitBackupConfirm(false);
+      onClose();
+    }, 750);
+  };
+
+  const handleConfirmExitWithoutBackup = () => {
+    setShowExitBackupConfirm(false);
+    onClose();
+  };
+
+  const handleOpenPrepTimeModal = (ord: Order) => {
+    setOrderToPrepare(ord);
+    setSelectedPrepMinutes(ord.estimatedPrepMinutes || 15);
+    setCustomPrepMinutes('');
+  };
+
+  const handleConfirmOrderPreparation = () => {
+    if (!orderToPrepare) return;
+    const minutes = customPrepMinutes ? parseInt(customPrepMinutes, 10) || selectedPrepMinutes : selectedPrepMinutes;
+    const finalMinutes = Math.max(1, Math.min(180, minutes || 15));
+
+    updateOrderStatus(orderToPrepare.id, 'preparing', { estimatedPrepMinutes: finalMinutes });
+    refreshData();
+    setOrderToPrepare(null);
+  };
+
   // Execute purge after confirmation ("بله")
   const handleConfirmPurge = async () => {
     if (!purgeTarget) return;
@@ -216,10 +323,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
 
   // New incoming order real-time alert banner
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
+  // Unconfirmed pending orders reminder state
+  const [unconfirmedPendingCount, setUnconfirmedPendingCount] = useState<number>(0);
+  const ordersRef = useRef<Order[]>([]);
 
   // Refresh all data
   const refreshData = () => {
-    setOrders(getOrders());
+    const currentOrders = getOrders();
+    ordersRef.current = currentOrders;
+    setOrders(currentOrders);
+    const pendingCount = currentOrders.filter((o) => o.status === 'pending').length;
+    setUnconfirmedPendingCount(pendingCount);
     setUsers(getUsers());
     setMenuItems(getMenuItems());
     setStats(getCafeStats());
@@ -266,8 +380,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
         }
       });
 
+      // Periodic reminder: if there are pending orders waiting for confirmation and prep start,
+      // replay the chime sound every 60 seconds (1 minute) to notify the manager:
+      // "وقتی برای مدیریت سفارشی اومد و مدیر یادش رفت روی تایید و شروع آماده سازی بزنه، هر یک دقیقه یکبار یک صدای دینگ یا نوتیف پخش کن"
+      const reminderInterval = setInterval(() => {
+        const pendingOrders = ordersRef.current.filter((o) => o.status === 'pending');
+        if (pendingOrders.length > 0) {
+          playOrderAlertSound();
+          setUnconfirmedPendingCount(pendingOrders.length);
+        }
+      }, 60000);
+
       return () => {
         unsubscribe();
+        clearInterval(reminderInterval);
       };
     }
   }, [isOpen, reportPeriod]);
@@ -294,7 +420,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
 
   const pendingUsers = users.filter((u) => u.status === 'pending');
   const approvedUsers = users.filter((u) => u.status === 'approved');
-  const bannedUsers = users.filter((u) => u.status === 'banned');
 
   // Handle User Approval
   const handleApproveUser = (userId: string, approve: boolean) => {
@@ -683,11 +808,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               )}
             </div>
 
-            {/* Exit button */}
+            {/* Exit button with Daily Backup confirmation */}
             <button
-              onClick={onClose}
+              onClick={handleRequestExit}
               title="خروج از پنل مدیریت"
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 text-rose-300 text-xs font-semibold transition-all shrink-0"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 text-rose-300 text-xs font-semibold transition-all shrink-0 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">خروج از پنل</span>
@@ -793,6 +918,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     className="p-2 rounded-xl bg-black/40 hover:bg-black/60 text-emerald-300 hover:text-white transition-colors"
                   >
                     <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Unconfirmed Pending Orders 1-Minute Alert Notification Bar */}
+              {unconfirmedPendingCount > 0 && !newOrderAlert && (
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-950/80 via-[#26170F] to-[#1C120B] border border-amber-500/50 shadow-xl flex items-center justify-between gap-3 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-400 flex items-center justify-center shrink-0">
+                      <Volume2 className="w-5 h-5 animate-bounce" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-amber-300">
+                          {unconfirmedPendingCount} سفارش در انتظار تایید و تعیین زمان آماده‌سازی
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                          یادآور صوتی هر ۱ دقیقه فعال است
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#D8C7B8] mt-0.5 font-light">
+                        لطفاً روی دکمه «تایید و شروع آماده‌سازی» کلیک کرده و زمان مورد نیاز را انتخاب کنید تا تایمر معکوس برای مشتری فعال شود.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setOrderFilter('pending')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs transition-all shrink-0 shadow-md"
+                  >
+                    مشاهده سفارش‌ها
                   </button>
                 </div>
               )}
@@ -970,8 +1125,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                           </div>
                         </div>
 
-                        <div className="text-[11px] text-[#A8988C]">
-                          روش پرداخت: {ord.paymentMethod === 'rabia_credit' ? 'اعتبار حساب رابیا' : 'کارت‌کشیدن حضوری در صندوق'}
+                        <div className="text-[11px] text-[#A8988C] flex items-center justify-between">
+                          <span>روش پرداخت: {ord.paymentMethod === 'rabia_credit' ? 'اعتبار حساب رابیا' : 'کارت‌کشیدن حضوری در صندوق'}</span>
+                          {ord.status === 'preparing' && <AdminOrderTimer order={ord} />}
                         </div>
                       </div>
 
@@ -979,13 +1135,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       <div className="pt-2 border-t border-[#C87D55]/15 flex items-center gap-1.5">
                         {ord.status === 'pending' && (
                           <button
-                            onClick={() => {
-                              updateOrderStatus(ord.id, 'preparing');
-                              refreshData();
-                            }}
-                            className="flex-1 py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-all"
+                            onClick={() => handleOpenPrepTimeModal(ord)}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
                           >
-                            تایید و شروع آماده‌سازی
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>تایید و شروع آماده‌سازی</span>
                           </button>
                         )}
 
@@ -1057,72 +1211,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                   <span>پاکسازی یوزرها</span>
                 </button>
               </div>
-
-              {/* Security Incidents / Banned Users Alert Section */}
-              {bannedUsers.length > 0 && (
-                <div className="p-4 sm:p-5 rounded-2xl bg-rose-950/40 border-2 border-rose-600/70 shadow-[0_0_25px_rgba(225,29,72,0.15)] space-y-3">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0 animate-pulse">
-                        <ShieldAlert className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm sm:text-base font-black text-rose-200">
-                          🚨 هشدارهای امنیتی: کاربران مسدود شده ({bannedUsers.length})
-                        </h4>
-                        <p className="text-[11px] text-rose-300/80">
-                          تلاش غیرمجاز برای تغییر اعتبار با ابزارهای Inspect یا دستکاری کلاینت شناسایی و حساب‌های زیر خودکار مسدود گردیدند:
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-3 py-1 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-sm">
-                      {bannedUsers.length} تخلف ثبت شده
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5 pt-2">
-                    {bannedUsers.map((u) => (
-                      <div
-                        key={u.id}
-                        className="p-3.5 rounded-xl bg-[#181311] border border-rose-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-black text-[#FDFBF7]">{u.name}</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold">
-                              ⛔ مسدود شده امنیتی (Banned)
-                            </span>
-                          </div>
-                          <div className="text-xs text-[#A8988C]" dir="ltr">
-                            شماره تماس: <strong className="text-rose-200">{u.phone}</strong>
-                          </div>
-                          <div className="text-xs text-rose-400 font-medium">
-                            علت مسدودی: <span>{u.banReason || 'تلاش برای افزایش یا دستکاری غیرمجاز اعتبار'}</span>
-                          </div>
-                          {u.securityAlert && (
-                            <div className="text-[11px] text-amber-300/90 font-mono bg-black/40 px-2 py-1 rounded-md max-w-fit" dir="ltr">
-                              گزارش: {u.securityAlert}
-                            </div>
-                          )}
-                          <div className="text-[10px] text-[#8F7E73]">
-                            زمان ثبت تخلف: {u.bannedAt ? new Date(u.bannedAt).toLocaleString('en-US') : 'نامشخص'}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleUnbanUser(u.id)}
-                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>رفع مسدودی (Unban)</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Pending Approvals Section */}
               <div className="space-y-3">
@@ -1221,18 +1309,83 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
           {/* TAB 3: RABIA CREDIT & IN-PERSON ORDERS */}
           {activeTab === 'credit' && (
             <div className="space-y-6 max-w-4xl mx-auto">
-              <div className="p-4 rounded-2xl bg-[#1A1513] border border-[#C87D55]/30">
-                <h3 className="text-base font-black text-[#FDFBF7] mb-1">
-                  سیستم مدیریت اعتبار مشتریان و سفارشات حضوری
-                </h3>
-                <p className="text-xs text-[#A8988C] font-light leading-relaxed">
-                  هنگامی که مشتری در کافه کارت می‌کشد، می‌توانید با سرچ شماره او هر مبلغی اعتبار به او اختصاص دهید.
-                  همچنین برای سفارشات حضوری می‌توانید از اعتبار مشتری کسر کنید.
-                </p>
+              {!isCreditUnlocked ? (
+                <div className="p-8 rounded-2xl bg-[#1A1513] border border-[#C87D55]/30 flex flex-col items-center justify-center max-w-sm mx-auto mt-10">
+                  <div className="w-16 h-16 rounded-full bg-[#C87D55]/10 flex items-center justify-center mb-4 border border-[#C87D55]/20">
+                    <Lock className="w-8 h-8 text-[#E0946B]" />
+                  </div>
+                  <h3 className="text-base font-black text-[#FDFBF7] mb-2 text-center">
+                    ورود به بخش اعتبار و سفارش حضوری
+                  </h3>
+                  <p className="text-xs text-[#A8988C] mb-6 text-center leading-relaxed">
+                    این بخش حاوی اطلاعات مالی و اعتباری مشتریان است. لطفاً برای دسترسی، رمز عبور را وارد کنید.
+                  </p>
+                  
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (creditPin === '4415') {
+                        setIsCreditUnlocked(true);
+                        setCreditPinError(false);
+                        setCreditPin('');
+                      } else {
+                        setCreditPinError(true);
+                      }
+                    }} 
+                    className="w-full space-y-4"
+                  >
+                    <div>
+                      <input
+                        type="password"
+                        dir="ltr"
+                        autoFocus
+                        value={creditPin}
+                        onChange={(e) => {
+                          setCreditPin(e.target.value);
+                          setCreditPinError(false);
+                        }}
+                        placeholder="رمز عبور (PIN)"
+                        className={`w-full bg-[#241E1B] border rounded-xl py-3 px-4 text-center text-lg tracking-[0.5em] text-[#FDFBF7] focus:outline-none transition-colors ${
+                          creditPinError ? 'border-rose-500/50 focus:border-rose-500 text-rose-300' : 'border-[#C87D55]/30 focus:border-[#C87D55]'
+                        }`}
+                      />
+                      {creditPinError && (
+                        <p className="text-rose-400 text-[10px] text-center mt-2 font-bold animate-pulse">رمز عبور اشتباه است</p>
+                      )}
+                    </div>
+                    
+                    <button
+                      type="submit"
+                      className="w-full py-3 rounded-xl copper-gradient text-white font-bold text-sm shadow-md transition-all flex justify-center items-center gap-2 hover:opacity-90"
+                    >
+                      <span>تایید و ورود</span>
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 rounded-2xl bg-[#1A1513] border border-[#C87D55]/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-black text-[#FDFBF7]">
+                        سیستم مدیریت اعتبار مشتریان و سفارشات حضوری
+                      </h3>
+                      <button 
+                        onClick={() => setIsCreditUnlocked(false)}
+                        className="text-[10px] text-[#A8988C] hover:text-rose-400 transition-colors flex items-center gap-1 border border-transparent hover:border-rose-900/50 px-2 py-1 rounded-md"
+                      >
+                        <Lock className="w-3 h-3" />
+                        قفل کردن مجدد
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#A8988C] font-light leading-relaxed">
+                      هنگامی که مشتری در کافه پرداخت نقدی انجام می‌دهد، می‌توانید با سرچ شماره او هر مبلغی اعتبار به او اختصاص دهید.
+                      همچنین برای سفارشات حضوری می‌توانید از اعتبار مشتری کسر کنید.
+                    </p>
 
-                {/* Search Customer Input */}
-                <form onSubmit={handleSearchCustomer} className="flex gap-2 mt-4">
-                  <div className="relative flex-1">
+                    {/* Search Customer Input */}
+                    <form onSubmit={handleSearchCustomer} className="flex gap-2 mt-4">
+                      <div className="relative flex-1">
                     <input
                       type="tel"
                       dir="ltr"
@@ -1284,36 +1437,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     </div>
                   </div>
 
-                  {selectedUser.status === 'banned' ? (
-                    <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-600/70 text-rose-200 space-y-3">
-                      <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                        <ShieldAlert className="w-5 h-5 shrink-0" />
-                        <span>این حساب کاربری به دلیل تخلف امنیتی مسدود شده است!</span>
-                      </div>
-                      <p className="text-xs text-rose-300 leading-relaxed">
-                        علت مسدودی: {selectedUser.banReason || 'تلاش برای جعل و دستکاری اعتبار کیف پول'}. تا زمان رفع مسدودی توسط مدیریت، امکان انجام سفارش یا شارژ اعتبار برای این حساب وجود ندارد.
-                      </p>
-                      {selectedUser.securityAlert && (
-                        <div className="text-[11px] text-amber-300/90 font-mono bg-black/40 px-2.5 py-1.5 rounded-lg max-w-fit" dir="ltr">
-                          گزارش سیستم: {selectedUser.securityAlert}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleUnbanUser(selectedUser.id)}
-                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>رفع مسدودی این کاربر (Unban)</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Action 1: Add/Charge Credit */}
                     <form onSubmit={handleChargeCredit} className="p-4 rounded-2xl bg-[#1A1513] border border-emerald-500/30 space-y-3">
                       <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
                         <Plus className="w-4 h-4" />
-                        <span>شارژ و افزایش اعتبار (کارت‌کشیدن مشتری)</span>
+                        <span>شارژ و افزایش اعتبار (پرداخت نقدی مشتری)</span>
                       </div>
 
                       <div>
@@ -1382,8 +1511,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       </button>
                     </form>
                   </div>
-                  )}
                 </div>
+              )}
+                </>
               )}
             </div>
           )}
@@ -2455,9 +2585,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               <div className="p-5 rounded-2xl bg-[#181311] border border-[#C87D55]/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-bold text-[#FDFBF7]">کدهای SQL آماده برای ساخت جدول‌ها در دیتابیس</h4>
+                    <h4 className="text-sm font-bold text-[#FDFBF7]">کدهای SQL آماده برای ساخت جدول‌ها و ستون‌های تایمر</h4>
                     <span className="text-[11px] text-[#A8988C]">
-                      این کدها را کپی کرده و در بخش SQL Editor داشبورد سوپابیس Run کنید:
+                      این کدها را کپی کرده و در بخش SQL Editor داشبورد سوپابیس Run کنید (حاوی دستورات افزودن ستون‌های زمان‌سنجی):
                     </span>
                   </div>
 
@@ -2472,6 +2602,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                     {copiedSql ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     <span>{copiedSql ? 'کپی شد!' : 'کپی تمام کدهای SQL'}</span>
                   </button>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200/90 leading-relaxed flex items-start gap-2">
+                  <span className="shrink-0 text-amber-400 font-bold">نکته:</span>
+                  <span>
+                    اگر قبلاً جداول را ساخته‌اید، برای فعال‌سازی ذخیره زمان آماده‌سازی در سوپابیس کافیست دستورات ALTER TABLE موجود در این اسکریپت را یک‌بار در SQL Editor سوپابیس اجرا نمایید. (حتی در صورت اجرا نشدن، سیستم به صورت هوشمند وضعیت سفارش را بدون خطا در سوپابیس و کلاینت به‌روز می‌کند).
+                  </span>
                 </div>
 
                 <pre className="p-4 rounded-xl bg-[#0F0D0C] border border-[#2B231E] text-[11px] text-[#A8988C] overflow-x-auto max-h-64 font-mono dir-ltr text-left leading-relaxed">
@@ -2574,6 +2711,221 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Daily Automatic Backup Exit Modal (پرسش از مدیر هنگام خروج از پنل) */}
+      {showExitBackupConfirm && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#181311] border-2 border-[#C87D55]/60 rounded-3xl p-6 sm:p-7 shadow-[0_0_50px_rgba(200,125,85,0.25)] text-center space-y-5">
+            {/* Header Icon */}
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-[#2A201A] border border-[#C87D55]/40 flex items-center justify-center shadow-inner">
+              <Database className="w-8 h-8 text-[#E29D74] animate-pulse" />
+            </div>
+
+            {/* Title & Badge */}
+            <div className="space-y-1.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-[#C87D55]/15 text-[#E29D74] border border-[#C87D55]/30">
+                <Calendar className="w-3.5 h-3.5 text-[#C87D55]" />
+                بک‌آپ گیری روزانه دیتابیس
+              </span>
+              <h3 className="text-lg sm:text-xl font-black text-[#FDFBF7] pt-1">
+                آیا می‌خواهید از داده‌های امروز بک‌آپ بگیرید؟
+              </h3>
+              <p className="text-xs text-[#A8988C] leading-relaxed">
+                نسخه پشتیبان شامل سفارش‌های امروز، کلیه کاربران و موجودی اعتباری، آیتم‌های منو و تاریخ دقیق جهت بازیابی مطمئن است.
+              </p>
+            </div>
+
+            {/* Date and Daily Activity Summary Box */}
+            <div className="p-4 rounded-2xl bg-[#1F1815] border border-[#C87D55]/25 text-right space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-[#C87D55]/20">
+                <div className="flex items-center gap-1.5 text-[#C4B3A5]">
+                  <Calendar className="w-4 h-4 text-[#C87D55]" />
+                  <span>تاریخ امروز (شمسی):</span>
+                </div>
+                <strong className="text-[#FDFBF7] font-mono text-sm" dir="ltr">
+                  {todayBackupStats?.dateInfo.shamsiDate}
+                </strong>
+              </div>
+
+              <div className="flex items-center justify-between text-[#A8988C] text-[11px]">
+                <span>تاریخ میلادی:</span>
+                <span className="font-mono text-[#D8C7B8]" dir="ltr">
+                  {todayBackupStats?.dateInfo.gregorianDate}
+                </span>
+              </div>
+
+              {todayBackupStats?.dateInfo.shamsiFull && (
+                <div className="text-[11px] text-[#C87D55] font-semibold text-center bg-[#2A201A] py-1.5 px-2.5 rounded-lg border border-[#C87D55]/20">
+                  {todayBackupStats.dateInfo.shamsiFull}
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-[#C87D55]/15 grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded-xl bg-black/30 border border-[#C87D55]/10">
+                  <span className="text-[10px] text-[#8F7E73] block mb-0.5">سفارش‌های امروز</span>
+                  <span className="text-xs sm:text-sm font-black text-[#FDFBF7]">
+                    {todayBackupStats?.ordersCount ?? 0} سفارش
+                  </span>
+                </div>
+                <div className="p-2 rounded-xl bg-black/30 border border-[#C87D55]/10">
+                  <span className="text-[10px] text-[#8F7E73] block mb-0.5">کاربران و اعتبارات</span>
+                  <span className="text-xs sm:text-sm font-black text-amber-300">
+                    {todayBackupStats?.totalUsersInDb ?? 0} کاربر
+                  </span>
+                </div>
+                <div className="p-2 rounded-xl bg-black/30 border border-[#C87D55]/10">
+                  <span className="text-[10px] text-[#8F7E73] block mb-0.5">فروش کل امروز</span>
+                  <span className="text-xs sm:text-sm font-black text-emerald-400">
+                    {(todayBackupStats?.salesToday ?? 0).toLocaleString('fa-IR')} <span className="text-[9px] font-normal text-[#A8988C]">تومان</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Download Status Notice */}
+            {backupDownloadSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-center gap-2 animate-fadeIn">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-medium">فایل با موفقیت دانلود شد. در حال خروج از پنل...</span>
+              </div>
+            )}
+
+            {/* Action Buttons: YES (بله) and NO (خیر) */}
+            <div className="space-y-2 pt-1">
+              <div className="grid grid-cols-2 gap-3">
+                {/* YES (بله) */}
+                <button
+                  type="button"
+                  onClick={handleConfirmExitWithBackup}
+                  disabled={backupDownloadSuccess}
+                  className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-70"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>بله (دانلود و خروج)</span>
+                </button>
+
+                {/* NO (خیر) */}
+                <button
+                  type="button"
+                  onClick={handleConfirmExitWithoutBackup}
+                  disabled={backupDownloadSuccess}
+                  className="py-3 px-4 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 hover:text-white font-bold text-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-70"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>خیر (فقط خروج)</span>
+                </button>
+              </div>
+
+              {/* Cancel Button */}
+              <button
+                type="button"
+                onClick={() => setShowExitBackupConfirm(false)}
+                disabled={backupDownloadSuccess}
+                className="w-full py-2 text-xs text-[#A8988C] hover:text-[#FDFBF7] font-medium transition-colors cursor-pointer"
+              >
+                انصراف و ماندن در پنل
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preparation Time Selection Modal */}
+      {orderToPrepare && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl bg-[#1C1613] border border-[#C87D55]/40 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200 text-right">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#C87D55]/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-[#FDFBF7]">تعیین زمان آماده‌سازی</h4>
+                  <p className="text-xs text-[#A8988C]">سفارش {orderToPrepare.orderNumber} ({orderToPrepare.userName})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderToPrepare(null)}
+                className="w-8 h-8 rounded-full bg-[#251D19] border border-[#C87D55]/20 text-[#A8988C] hover:text-[#FDFBF7] flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-[#D8C7B8] leading-relaxed">
+              مدت زمان تخمینی برای دم‌آوری و آماده شدن سفارش را انتخاب کنید. یک تایمر روزشمار در بخش پیگیری سفارش مشتری فعال خواهد شد و پس از پایان زمان، وضعیت به صورت خودکار به پیک در مسیر تغییر می‌کند.
+            </p>
+
+            {/* Preset Time Pills */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#FDFBF7] block">زمان‌های پیشنهادی (دقیقه):</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[5, 10, 15, 20, 25, 30, 45, 60].map((mins) => {
+                  const isSelected = !customPrepMinutes && selectedPrepMinutes === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPrepMinutes(mins);
+                        setCustomPrepMinutes('');
+                      }}
+                      className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-950/50'
+                          : 'bg-[#251D19] text-[#D8C7B8] border-[#C87D55]/20 hover:border-sky-500/40 hover:text-white'
+                      }`}
+                    >
+                      {mins} دقیقه
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-medium text-[#A8988C] block">یا وارد کردن زمان دلخواه (دقیقه):</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  placeholder="مثلاً ۱۲"
+                  value={customPrepMinutes}
+                  onChange={(e) => setCustomPrepMinutes(e.target.value)}
+                  className="w-full bg-[#251D19] border border-[#C87D55]/30 rounded-xl px-3 py-2 text-sm text-[#FDFBF7] focus:outline-none focus:border-sky-500 transition-colors placeholder:text-[#A8988C]/40 text-left"
+                  dir="ltr"
+                />
+                <span className="absolute right-3 top-2 text-xs text-[#A8988C] pointer-events-none">دقیقه</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmOrderPreparation}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black shadow-lg shadow-sky-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Check className="w-4 h-4" />
+                <span>شروع آماده‌سازی ({customPrepMinutes || selectedPrepMinutes} دقیقه)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOrderToPrepare(null)}
+                className="py-2.5 px-4 rounded-xl bg-[#251D19] hover:bg-[#2F2420] text-[#D8C7B8] text-xs font-bold transition-all border border-[#C87D55]/20 cursor-pointer"
+              >
+                انصراف
+              </button>
+            </div>
           </div>
         </div>
       )}

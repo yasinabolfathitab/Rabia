@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Award, Wallet, Clock, ArrowDown } from 'lucide-react';
+import { Sparkles, ArrowDown } from 'lucide-react';
 
 interface HeroBannerProps {
   onScrollToMenu: () => void;
@@ -42,38 +42,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onScrollToMenu, onOpenCr
               شیرینی‌های تازه و کراسان‌های فرانسوی در محیطی آرام.
             </p>
 
-            {/* Features pills */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 w-full max-w-xl lg:max-w-none">
-              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
-                <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
-                  <Award className="w-4 h-4" />
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-[#FDFBF7]">عربیکا 100% تخصصی</div>
-                  <div className="text-[10px] text-[#A8988C]">برشته‌کاری تازه</div>
-                </div>
-              </div>
 
-              <div className="p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
-                <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-[#FDFBF7]">اعتبار هدیه رابیا</div>
-                  <div className="text-[10px] text-[#A8988C]">با هر بار خرید</div>
-                </div>
-              </div>
-
-              <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-[#1E1917]/80 border border-[#C87D55]/20 flex items-center justify-center lg:justify-start gap-2.5 text-right">
-                <div className="w-8 h-8 rounded-xl bg-[#C87D55]/15 text-[#E0946B] flex items-center justify-center shrink-0">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-[#FDFBF7]">سفارش سریع و لحظه‌ای</div>
-                  <div className="text-[10px] text-[#A8988C]">سرو در سالن و بیرون‌بر</div>
-                </div>
-              </div>
-            </div>
 
             {/* CTAs */}
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3.5 pt-2 w-full">

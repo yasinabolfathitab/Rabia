@@ -138,6 +138,9 @@ export async function syncOrdersAndUsersWithSupabase() {
         status: raw.status,
         createdAt: raw.created_at,
         notes: raw.notes || undefined,
+        estimatedPrepMinutes: raw.estimated_prep_minutes ? Number(raw.estimated_prep_minutes) : undefined,
+        prepStartedAt: raw.prep_started_at || undefined,
+        estimatedReadyAt: raw.estimated_ready_at || undefined,
       }));
       localStorage.setItem(ORDERS_KEY, JSON.stringify(mappedOrders));
       emitRealtimeEvent('order_status_updated');
@@ -217,6 +220,9 @@ export async function initSupabaseRealtimeSync() {
               status: raw.status,
               createdAt: raw.created_at,
               notes: raw.notes || undefined,
+              estimatedPrepMinutes: raw.estimated_prep_minutes ? Number(raw.estimated_prep_minutes) : undefined,
+              prepStartedAt: raw.prep_started_at || undefined,
+              estimatedReadyAt: raw.estimated_ready_at || undefined,
             };
             if (!orders.some((o) => o.id === newOrd.id)) {
               orders.unshift(newOrd);
@@ -229,6 +235,9 @@ export async function initSupabaseRealtimeSync() {
             if (idx >= 0) {
               orders[idx].status = raw.status;
               orders[idx].totalAmount = Number(raw.total_amount);
+              if (raw.estimated_prep_minutes !== undefined) orders[idx].estimatedPrepMinutes = Number(raw.estimated_prep_minutes);
+              if (raw.prep_started_at !== undefined) orders[idx].prepStartedAt = raw.prep_started_at;
+              if (raw.estimated_ready_at !== undefined) orders[idx].estimatedReadyAt = raw.estimated_ready_at;
               localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
               emitRealtimeEvent('order_status_updated', orders[idx]);
             }
@@ -631,9 +640,28 @@ export function deleteMenuItem(itemId: string): boolean {
 export function getUsers(): User[] {
   try {
     const data = localStorage.getItem(USERS_KEY);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(USERS_KEY, JSON.stringify(INITIAL_USERS));
-    return INITIAL_USERS;
+    let list: User[] = data ? JSON.parse(data) : INITIAL_USERS;
+    let modified = false;
+
+    // Ensure no user remains banned
+    list = list.map((u) => {
+      if (u.status === 'banned') {
+        modified = true;
+        return {
+          ...u,
+          status: 'approved',
+          banReason: undefined,
+          bannedAt: undefined,
+          securityAlert: undefined,
+        };
+      }
+      return u;
+    });
+
+    if (modified) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(list));
+    }
+    return list;
   } catch {
     return INITIAL_USERS;
   }
@@ -696,13 +724,6 @@ export function loginUser(phone: string, password: string): { success: boolean; 
 
   if (!user) {
     return { success: false, message: 'کاربری با این شماره تلفن یافت نشد. لطفاً ابتدا ثبت نام کنید.' };
-  }
-
-  if (user.status === 'banned') {
-    return {
-      success: false,
-      message: `حساب کاربری شما به دلیل تخلف امنیتی (${user.banReason || 'تلاش برای دستکاری اعتبار'}) مسدود شده است. جهت پیگیری با مدیریت کافه رابیا تماس بگیرید.`,
-    };
   }
 
   if (user.password && user.password !== password) {
@@ -845,10 +866,6 @@ export function adjustUserCredit(
     return { success: false, newCredit: 0, message: 'کاربر مورد نظر یافت نشد.' };
   }
 
-  if (user.status === 'banned') {
-    return { success: false, newCredit: 0, message: 'این حساب به دلیل تلاش برای دستکاری مسدود است و امکان تغییر اعتبار وجود ندارد.' };
-  }
-
   if (amount < 0 && user.rabiaCredit < Math.abs(amount)) {
     return { success: false, newCredit: user.rabiaCredit, message: 'موجودی اعتبار کاربر کمتر از مبلغ درخواستی است.' };
   }
@@ -932,61 +949,19 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
       };
     }
 
-    if (user.status === 'banned') {
-      return {
-        success: false,
-        message: 'حساب کاربری شما به دلیل تخلف امنیتی مسدود است و امکان پرداخت با اعتبار وجود ندارد.',
-      };
-    }
-
-    // 1. Check Cryptographic Signature & In-memory / Vault Integrity
-    const integrity = verifyUserCreditIntegrity(user);
-    if (!integrity.valid) {
-      banUserForTampering(
-        user.id,
-        'تلاش برای پرداخت با اعتبار جعلی یا دستکاری شده (DevTools / Inspect)',
-        integrity.reason
-      );
-      return {
-        success: false,
-        message: 'تلاش برای جعل اعتبار کیف پول شناسایی و حساب کاربری شما مسدود گردید.',
-      };
-    }
-
-    // 2. Authoritative Database Check against Supabase
+    // Database check against Supabase if available
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
         const { data: remoteUser, error: remoteErr } = await supabase
           .from('users')
-          .select('id, rabia_credit, status')
+          .select('id, rabia_credit')
           .eq('id', user.id)
           .single();
 
         if (!remoteErr && remoteUser) {
-          if (remoteUser.status === 'banned') {
-            banUserForTampering(user.id, 'حساب کاربری در پایگاه داده سرور مسدود اعلام شده است.');
-            return {
-              success: false,
-              message: 'حساب کاربری شما مسدود است.',
-            };
-          }
-
           const serverCredit = Number(remoteUser.rabia_credit || 0);
           if (serverCredit < orderInput.totalAmount) {
-            // Check if local client inflated their credit
-            if (user.rabiaCredit > serverCredit) {
-              banUserForTampering(
-                user.id,
-                'مغایرت اعتبار با دیتابیس ابری (تلاش برای جعل با Inspect)',
-                `اعتبار ادعایی: ${user.rabiaCredit.toLocaleString('en-US')} تومان | اعتبار واقعی سرور: ${serverCredit.toLocaleString('en-US')} تومان`
-              );
-              return {
-                success: false,
-                message: 'جعل اعتبار شناسایی شد و حساب کاربری شما فوراً مسدود گردید.',
-              };
-            }
-
             return {
               success: false,
               message: 'موجودی اعتبار حساب رابیا شما برای پرداخت این سفارش کافی نیست.',
@@ -994,7 +969,7 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
           }
         }
       } catch (err) {
-        console.warn('Authoritative Supabase check error, fallback to signature:', err);
+        console.warn('Authoritative Supabase check error:', err);
       }
     }
 
@@ -1052,9 +1027,37 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
           status: newOrder.status,
           created_at: newOrder.createdAt,
           notes: newOrder.notes || null,
+          estimated_prep_minutes: newOrder.estimatedPrepMinutes || null,
+          prep_started_at: newOrder.prepStartedAt || null,
+          estimated_ready_at: newOrder.estimatedReadyAt || null,
         });
       if (error) {
-        console.error('Supabase order insert error:', error);
+        // If the table was created before timing columns were added, retry without optional columns
+        if (error.code === 'PGRST204' || error.message?.includes('estimated_prep_minutes')) {
+          const { error: retryErr } = await supabase
+            .from('orders')
+            .insert({
+              id: newOrder.id,
+              order_number: newOrder.orderNumber,
+              user_id: newOrder.userId || null,
+              user_name: newOrder.userName,
+              user_phone: newOrder.userPhone,
+              order_type: newOrder.orderType,
+              address: newOrder.address || null,
+              table_number: newOrder.tableNumber || null,
+              items: newOrder.items,
+              total_amount: newOrder.totalAmount,
+              payment_method: newOrder.paymentMethod,
+              status: newOrder.status,
+              created_at: newOrder.createdAt,
+              notes: newOrder.notes || null,
+            });
+          if (retryErr) {
+            console.warn('Supabase fallback order insert error:', retryErr);
+          }
+        } else {
+          console.error('Supabase order insert error:', error);
+        }
       }
     } catch (err) {
       console.error('Supabase order insert exception:', err);
@@ -1068,22 +1071,74 @@ export async function createOrder(orderInput: Omit<Order, 'id' | 'orderNumber' |
   };
 }
 
-export function updateOrderStatus(orderId: string, status: OrderStatus) {
+export interface UpdateOrderStatusOptions {
+  estimatedPrepMinutes?: number;
+}
+
+export function updateOrderStatus(orderId: string, status: OrderStatus, options?: UpdateOrderStatusOptions) {
   const orders = getOrders();
   const order = orders.find((o) => o.id === orderId);
   if (order) {
+    if (status === 'cancelled' && order.status !== 'cancelled') {
+      if (order.paymentMethod === 'rabia_credit' && order.userId) {
+        adjustUserCredit(
+          order.userId,
+          order.totalAmount,
+          'admin_charge',
+          `برگشت وجه سفارش لغو شده #${order.orderNumber}`
+        );
+      }
+    }
+
     order.status = status;
+    
+    if (status === 'preparing') {
+      const prepMinutes = options?.estimatedPrepMinutes ?? order.estimatedPrepMinutes ?? 15;
+      const now = new Date();
+      const readyTime = new Date(now.getTime() + prepMinutes * 60 * 1000);
+      order.estimatedPrepMinutes = prepMinutes;
+      order.prepStartedAt = now.toISOString();
+      order.estimatedReadyAt = readyTime.toISOString();
+    }
+
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
     emitRealtimeEvent('order_status_updated', order);
 
     const supabase = getSupabaseClient();
     if (supabase) {
+      const updatePayload: any = { status };
+      if (order.estimatedPrepMinutes !== undefined) {
+        updatePayload.estimated_prep_minutes = order.estimatedPrepMinutes;
+      }
+      if (order.prepStartedAt !== undefined) {
+        updatePayload.prep_started_at = order.prepStartedAt;
+      }
+      if (order.estimatedReadyAt !== undefined) {
+        updatePayload.estimated_ready_at = order.estimatedReadyAt;
+      }
+
       supabase
         .from('orders')
-        .update({ status })
+        .update(updatePayload)
         .eq('id', orderId)
         .then(({ error }) => {
-          if (error) console.error('Supabase order status update error:', error);
+          if (error) {
+            // If the Supabase table doesn't have the timing columns yet (code PGRST204),
+            // gracefully fallback to updating only the status so remote state still synchronizes cleanly.
+            if (error.code === 'PGRST204' || error.message?.includes('estimated_prep_minutes')) {
+              supabase
+                .from('orders')
+                .update({ status })
+                .eq('id', orderId)
+                .then(({ error: retryErr }) => {
+                  if (retryErr) {
+                    console.warn('Supabase fallback order status update error:', retryErr);
+                  }
+                });
+            } else {
+              console.error('Supabase order status update error:', error);
+            }
+          }
         });
     }
   }
@@ -1168,6 +1223,9 @@ export async function fetchLiveOrder(query: string): Promise<Order | null> {
           status: data.status,
           createdAt: data.created_at,
           notes: data.notes || undefined,
+          estimatedPrepMinutes: data.estimated_prep_minutes ? Number(data.estimated_prep_minutes) : undefined,
+          prepStartedAt: data.prep_started_at || undefined,
+          estimatedReadyAt: data.estimated_ready_at || undefined,
         };
 
         // Update local storage cache
@@ -1375,6 +1433,158 @@ export interface FullDatabaseBackup {
   users: User[];
   menuItems: MenuItem[];
   transactions: CreditTransaction[];
+}
+
+export function getPersianDateInfo(d: Date = new Date()) {
+  let shamsiDate = '';
+  let shamsiFull = '';
+  try {
+    const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d).split('/');
+    if (parts.length === 3) {
+      shamsiDate = `${parts[0]}-${parts[1]}-${parts[2]}`;
+    } else {
+      shamsiDate = parts.join('-');
+    }
+    shamsiFull = new Intl.DateTimeFormat('fa-IR', {
+      dateStyle: 'full',
+    }).format(d);
+  } catch {
+    shamsiDate = d.toISOString().slice(0, 10);
+    shamsiFull = d.toLocaleDateString('fa-IR');
+  }
+
+  const gregorianDate = d.toISOString().slice(0, 10);
+  const timeFormatted = d.toLocaleTimeString('fa-IR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  return { shamsiDate, shamsiFull, gregorianDate, timeFormatted };
+}
+
+export function getTodayBackupStats() {
+  const now = new Date();
+  const dateInfo = getPersianDateInfo(now);
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+  const allOrders = getOrders();
+  const todayOrders = allOrders.filter((o) => {
+    if (!o.createdAt) return false;
+    const t = new Date(o.createdAt).getTime();
+    return t >= startOfDay && t <= endOfDay;
+  });
+
+  const allTransactions = getCreditTransactions();
+  const todayTransactions = allTransactions.filter((tr) => {
+    if (!tr.createdAt) return false;
+    const t = new Date(tr.createdAt).getTime();
+    return t >= startOfDay && t <= endOfDay;
+  });
+
+  const salesToday = todayOrders
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  return {
+    dateInfo,
+    ordersCount: todayOrders.length,
+    transactionsCount: todayTransactions.length,
+    salesToday,
+    totalOrdersInDb: allOrders.length,
+    totalUsersInDb: getUsers().length,
+  };
+}
+
+export function exportDailyDatabaseBackup(): {
+  fileName: string;
+  ordersTodayCount: number;
+  salesToday: number;
+  shamsiDate: string;
+  gregorianDate: string;
+} {
+  const now = new Date();
+  const dateInfo = getPersianDateInfo(now);
+
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+  const allOrders = getOrders();
+  const allUsers = getUsers();
+  const allMenuItems = getMenuItems();
+  const allTransactions = getCreditTransactions();
+
+  const todayOrders = allOrders.filter((o) => {
+    if (!o.createdAt) return false;
+    const t = new Date(o.createdAt).getTime();
+    return t >= startOfDay && t <= endOfDay;
+  });
+
+  const todayTransactions = allTransactions.filter((tr) => {
+    if (!tr.createdAt) return false;
+    const t = new Date(tr.createdAt).getTime();
+    return t >= startOfDay && t <= endOfDay;
+  });
+
+  const salesToday = todayOrders
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const backupPayload = {
+    title: 'پشتیبان روزانه پایگاه داده کافه رابیا',
+    backupType: 'daily_backup',
+    version: '2.0',
+    app: 'Rabia Cafe',
+    exportedAt: now.toISOString(),
+    dates: {
+      shamsi: dateInfo.shamsiDate,
+      shamsiFull: dateInfo.shamsiFull,
+      gregorian: dateInfo.gregorianDate,
+      time: dateInfo.timeFormatted,
+      timestamp: now.getTime(),
+    },
+    todayReport: {
+      dateShamsi: dateInfo.shamsiDate,
+      dateGregorian: dateInfo.gregorianDate,
+      totalOrdersCount: todayOrders.length,
+      totalSalesTomans: salesToday,
+      completedOrdersCount: todayOrders.filter((o) => o.status === 'delivered').length,
+      pendingOrdersCount: todayOrders.filter((o) => o.status === 'pending').length,
+      todayTransactionsCount: todayTransactions.length,
+    },
+    todayOrders,
+    todayTransactions,
+    // Database snapshot so this file can also be restored 100% reliably
+    orders: allOrders,
+    users: allUsers,
+    menuItems: allMenuItems,
+    transactions: allTransactions,
+  };
+
+  const jsonStr = JSON.stringify(backupPayload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const fileName = `RabiaCafe_Backup_${dateInfo.shamsiDate}_${dateInfo.gregorianDate}.json`;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return {
+    fileName,
+    ordersTodayCount: todayOrders.length,
+    salesToday,
+    shamsiDate: dateInfo.shamsiDate,
+    gregorianDate: dateInfo.gregorianDate,
+  };
 }
 
 export function exportFullDatabaseBackup() {

@@ -142,7 +142,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-[#C87D55]/20 text-[10px] sm:text-[11px] text-[#A8988C] flex items-center gap-1.5">
               <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E0946B] shrink-0" />
               <span>
-                هر بار کارت کشیدن در کافه = شارژ اعتبار مستقیم توسط مدیریت برای سفارشات بعدی
+                هر بار پرداخت نقدی = شارژ اعتبار مستقیم توسط مدیریت برای سفارشات بعدی
               </span>
             </div>
           </div>
@@ -321,7 +321,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="space-y-2.5 sm:space-y-3 max-h-64 sm:max-h-80 overflow-y-auto pr-1">
               {userTransactions.length === 0 ? (
                 <div className="text-center py-8 sm:py-10 text-xs text-[#A8988C]">
-                  هنوز تراکنش اعتباری ثبت نشده است. هر بار کارت‌کشیدن در کافه توسط مدیریت شارژ خواهد شد.
+                  هنوز تراکنش اعتباری ثبت نشده است. هر بار پرداخت نقدی توسط مدیریت شارژ خواهد شد.
                 </div>
               ) : (
                 userTransactions.map((tx) => (
