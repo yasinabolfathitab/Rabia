@@ -11,6 +11,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { CreditInfoModal } from './components/CreditInfoModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { Footer } from './components/Footer';
+import { FullScreenLoader } from './components/FullScreenLoader';
 
 import { User, MenuItem, CartItem, Order } from './types';
 import { getMenuItems, getUsers, subscribeRealtime, initSupabaseRealtimeSync, parseIsAvailable } from './lib/database';
@@ -196,6 +197,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#12100E] text-[#FDFBF7] flex flex-col selection:bg-[#C87D55] selection:text-white">
+      {/* 3-Second Full Screen Splash Loader */}
+      <FullScreenLoader duration={3000} />
+
       {/* Header */}
       <Header
         user={currentUser}
