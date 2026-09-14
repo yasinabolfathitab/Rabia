@@ -2669,15 +2669,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       Project URL (آدرس اختصاصی پروژه در سوپابیس):
                     </label>
                     <input
-                      type="url"
+                      type="text"
                       dir="ltr"
                       value={sbUrl}
                       onChange={(e) => setSbUrl(e.target.value)}
-                      placeholder="https://xyzabcdefghijklmn.supabase.co"
+                      placeholder="/api یا https://xyzabcdefghijklmn.supabase.co"
                       className="w-full bg-[#241E1B] border border-[#C87D55]/30 rounded-xl p-3 text-[#FDFBF7] focus:outline-none focus:border-[#C87D55]"
                     />
                     <span className="text-[10px] text-[#8C7B71] mt-1 block">
-                      نمونه: https://abcdefghijklmn.supabase.co
+                      نمونه استاندارد کلودفلر: /api (یا آدرس مستقیم مانند https://abcdefghijklmn.supabase.co)
                     </span>
                   </div>
 

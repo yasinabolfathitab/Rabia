@@ -3,13 +3,26 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_KEY_URL = 'rabia_supabase_url';
 const STORAGE_KEY_KEY = 'rabia_supabase_key';
 
-export const DEFAULT_SUPABASE_URL = 'https://api.rabia-cafebakery.ir';
+export const DEFAULT_SUPABASE_URL = '/api';
 export const DEFAULT_SUPABASE_KEY = 'sb_publishable_dQl9IpKLLuxRvpt_CXEsEw_kM3j8X7z';
+
+export function resolveSupabaseUrl(url?: string | null): string {
+  if (!url || typeof url !== 'string') return DEFAULT_SUPABASE_URL;
+  const trimmed = url.trim();
+  if (trimmed === '/api' || trimmed.startsWith('/api/') || trimmed.startsWith('/')) {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+    }
+    return `http://localhost:3000${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+  }
+  return trimmed;
+}
 
 export function isValidSupabaseUrl(url?: string | null): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
   if (!trimmed || trimmed.startsWith('YOUR_') || trimmed === 'MY_APP_URL') return false;
+  if (trimmed === '/api' || trimmed.startsWith('/api/') || trimmed.startsWith('/')) return true;
   try {
     const parsed = new URL(trimmed);
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
@@ -103,7 +116,8 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (!url || !key || !isValidSupabaseUrl(url)) return null;
 
   try {
-    _cachedClient = createClient(url, key);
+    const fullUrl = resolveSupabaseUrl(url);
+    _cachedClient = createClient(fullUrl, key);
     return _cachedClient;
   } catch {
     return null;
@@ -127,13 +141,14 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
     if (!isValidSupabaseUrl(testUrl)) {
       return {
         success: false,
-        message: 'آدرس پروژه وارد شده معتبر نیست. آدرس باید با https:// شروع شود (مانند https://xyz.supabase.co).',
+        message: 'آدرس پروژه وارد شده معتبر نیست. آدرس باید با /api یا https:// شروع شود.',
       };
     }
 
     let client: SupabaseClient;
     try {
-      client = createClient(testUrl, testKey);
+      const fullUrl = resolveSupabaseUrl(testUrl);
+      client = createClient(fullUrl, testKey);
     } catch (initErr: any) {
       return {
         success: false,
