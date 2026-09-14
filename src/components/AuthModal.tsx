@@ -236,8 +236,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-[#201A18] border border-[#C87D55]/15 text-[11px] text-[#A8988C]">
-                  💡 <strong>نکته:</strong> ورود به حساب کاربری پس از تایید مدیریت کافه رابیا امکان‌پذیر خواهد بود.
+                <div className="p-3 rounded-xl bg-[#201A18] border border-[#C87D55]/15 text-[11px] text-[#A8988C] space-y-1">
+                  <div>💡 <strong>نکته:</strong> ورود به حساب کاربری پس از تایید مدیریت کافه رابیا امکان‌پذیر است.</div>
+                  <div className="text-[10px] text-[#C87D55]">🔑 <strong>فراموشی رمز؟</strong> جهت بازیابی و دریافت رمز موقت، به مدیریت کافه اطلاع دهید تا رمز شما را فوراً بازنشانی کند.</div>
                 </div>
 
                 <button

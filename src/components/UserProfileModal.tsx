@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   User as UserIcon, 
@@ -11,7 +11,10 @@ import {
   CheckCircle2, 
   Sparkles, 
   History,
-  ShoppingBag
+  ShoppingBag,
+  KeyRound,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { User, Order, CreditTransaction } from '../types';
 import { updateUserProfile, getOrders, getTransactions } from '../lib/database';
@@ -49,15 +52,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('مشخصات شما با موفقیت در دیتابیس رابیا ذخیره گردید.');
   const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [userTransactions, setUserTransactions] = useState<CreditTransaction[]>([]);
 
+  const prevIsOpenRef = useRef(false);
+  const prevUserIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (user) {
-      setName(user.name || '');
-      setPhone(user.phone || '');
-      setAddress(user.address || '');
+    if (isOpen && user) {
+      const isFirstOpen = !prevIsOpenRef.current && isOpen;
+      const isDifferentUser = prevUserIdRef.current !== user.id;
+
+      // Only populate/reset editable form inputs when the modal is freshly opened or user account switched
+      if (isFirstOpen || isDifferentUser) {
+        setName(user.name || '');
+        setPhone(user.phone || '');
+        setAddress(user.address || '');
+        setNewPassword('');
+        setShowPasswordInput(false);
+      }
 
       // Load user's orders
       const allOrders = getOrders();
@@ -71,21 +88,36 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       const myTx = allTx.filter((t) => t.userId === user.id || t.userPhone === user.phone);
       setUserTransactions(myTx);
     }
-  }, [user, isOpen]);
+
+    prevIsOpenRef.current = isOpen;
+    prevUserIdRef.current = user ? user.id : null;
+  }, [isOpen, user?.id]);
 
   if (!isOpen || !user) return null;
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    const updated = updateUserProfile(user.id, {
+    const updates: Partial<User> = {
       name: name.trim(),
       phone: phone.trim(),
       address: address.trim(),
-    });
+    };
+
+    if (newPassword.trim()) {
+      if (newPassword.trim().length < 4) {
+        alert('رمز عبور باید حداقل 4 کاراکتر باشد.');
+        return;
+      }
+      updates.password = newPassword.trim();
+    }
+
+    const updated = updateUserProfile(user.id, updates);
 
     if (updated) {
       onUpdateUser(updated);
+      setSaveMessage(newPassword.trim() ? 'مشخصات و رمز عبور جدید شما با موفقیت ذخیره شد.' : 'مشخصات شما با موفقیت در دیتابیس رابیا ذخیره گردید.');
       setSaveSuccess(true);
+      setNewPassword('');
       setTimeout(() => setSaveSuccess(false), 3000);
     }
   };
@@ -192,7 +224,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {saveSuccess && (
                 <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>مشخصات شما با موفقیت در دیتابیس رابیا ذخیره گردید.</span>
+                  <span>{saveMessage}</span>
                 </div>
               )}
 
@@ -219,6 +251,38 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   placeholder="09121234567"
                   className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 text-xs text-[#FDFBF7] focus:outline-none text-left font-mono tracking-wider"
                 />
+              </div>
+
+              {/* Password Change Option */}
+              <div className="pt-1 pb-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#D8C7B8] flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-[#E0946B]" />
+                    <span>تغییر رمز عبور</span>
+                  </label>
+                  <span className="text-[10px] text-[#A8988C] font-light">در صورت نیاز به تغییر رمز</span>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showPasswordInput ? 'text' : 'password'}
+                    dir="ltr"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="رمز عبور جدید (حداقل ۴ کاراکتر)"
+                    className="w-full bg-[#221B17] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl px-3.5 py-2 sm:py-2.5 pl-10 text-xs sm:text-sm text-[#FDFBF7] focus:outline-none text-right placeholder:text-neutral-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordInput(!showPasswordInput)}
+                    className="absolute left-3 top-2.5 text-[#A8988C] hover:text-[#FDFBF7] transition-colors"
+                  >
+                    {showPasswordInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#8C7A6E] mt-1">
+                  💡 اگر رمزتان توسط مدیریت بازنشانی شده، می‌توانید در این قسمت رمز دلخواه جدید خود را تعیین کنید.
+                </p>
               </div>
 
               <div>

@@ -68,6 +68,7 @@ import {
   getUsers, 
   approveUser, 
   unbanUser,
+  resetUserPassword,
   adjustUserCredit, 
   getMenuItems, 
   saveMenuItem, 
@@ -233,6 +234,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const [isPurging, setIsPurging] = useState(false);
   const [purgeResult, setPurgeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showPurgeMenu, setShowPurgeMenu] = useState(false);
+
+  // User tab states
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [passwordResetUser, setPasswordResetUser] = useState<User | null>(null);
+  const [customPasswordInput, setCustomPasswordInput] = useState('1234');
+  const [userActionFeedback, setUserActionFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   // Daily Exit Backup Modal states (پرسش از مدیر هنگام خروج از پنل برای بک‌آپ روزانه)
   const [showExitBackupConfirm, setShowExitBackupConfirm] = useState(false);
@@ -425,6 +432,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
   const handleApproveUser = (userId: string, approve: boolean) => {
     approveUser(userId, approve);
     refreshData();
+  };
+
+  // Handle User Password Reset
+  const handleResetPassword = (userId: string, newPass?: string) => {
+    const passToSet = (newPass || customPasswordInput || '1234').trim();
+    if (!passToSet) {
+      setUserActionFeedback({ success: false, message: 'رمز عبور نمی‌تواند خالی باشد.' });
+      return;
+    }
+    const result = resetUserPassword(userId, passToSet);
+    setUserActionFeedback(result);
+    setPasswordResetUser(null);
+    refreshData();
+    setTimeout(() => {
+      setUserActionFeedback(null);
+    }, 5000);
   };
 
   // Handle User Unban
@@ -1212,6 +1235,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                 </button>
               </div>
 
+              {/* User Action Feedback Toast */}
+              {userActionFeedback && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2 shadow-lg transition-all ${
+                    userActionFeedback.success
+                      ? 'bg-emerald-950/90 border border-emerald-700 text-emerald-300'
+                      : 'bg-rose-950/90 border border-rose-700 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {userActionFeedback.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    )}
+                    <span className="font-semibold">{userActionFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUserActionFeedback(null)}
+                    className="p-1 hover:bg-black/20 rounded-lg text-[#A8988C]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Pending Approvals Section */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -1275,33 +1325,105 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
 
               {/* Approved Customers Directory */}
               <div className="space-y-3 pt-4 border-t border-[#C87D55]/20">
-                <h3 className="text-base font-black text-[#FDFBF7]">
-                  مشتریان تایید شده کافه رابیا ({approvedUsers.length})
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <h3 className="text-base font-black text-[#FDFBF7]">
+                      مشتریان تایید شده کافه رابیا ({approvedUsers.length})
+                    </h3>
+                    <p className="text-[11px] text-[#A8988C] mt-0.5">
+                      امکان مشاهده، جستجو و بازنشانی رمز عبور مشتریان در صورت فراموشی
+                    </p>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {approvedUsers.map((u) => (
-                    <div
-                      key={u.id}
-                      className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-[#FDFBF7]">{u.name}</span>
-                        <span className="text-xs font-black text-[#E0946B]">
-                          اعتبار: {u.rabiaCredit.toLocaleString('en-US')} تومان
-                        </span>
-                      </div>
-                      <div className="text-xs text-[#A8988C]" dir="ltr">
-                        {u.phone}
-                      </div>
-                      {u.address && (
-                        <div className="text-[11px] text-[#B8A698] truncate">
-                          آدرس: {u.address}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {/* Search inside users */}
+                  <div className="relative w-full sm:w-64">
+                    <input
+                      type="text"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      placeholder="جستجوی نام یا شماره مشتری..."
+                      className="w-full bg-[#1C1613] border border-[#C87D55]/30 focus:border-[#C87D55] rounded-xl py-1.5 px-3 pr-8 text-xs text-[#FDFBF7] focus:outline-none placeholder:text-neutral-500"
+                    />
+                    <Search className="w-3.5 h-3.5 text-[#A8988C] absolute right-2.5 top-2.5" />
+                    {userSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setUserSearchTerm('')}
+                        className="absolute left-2.5 top-2 text-[#A8988C] hover:text-white"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {(() => {
+                  const filteredUsers = approvedUsers.filter((u) => {
+                    if (!userSearchTerm.trim()) return true;
+                    const q = userSearchTerm.trim().toLowerCase();
+                    return (
+                      u.name?.toLowerCase().includes(q) ||
+                      u.phone?.includes(q) ||
+                      u.address?.toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filteredUsers.length === 0) {
+                    return (
+                      <div className="p-5 rounded-2xl bg-[#1A1513] border border-[#C87D55]/20 text-xs text-[#A8988C] text-center">
+                        هیچ کاربری با این مشخصات یافت نشد.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {filteredUsers.map((u) => (
+                        <div
+                          key={u.id}
+                          className="p-3.5 rounded-2xl bg-[#1C1613] border border-[#C87D55]/20 space-y-2.5 flex flex-col justify-between"
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-bold text-[#FDFBF7]">{u.name}</span>
+                              <span className="text-xs font-black text-[#E0946B]">
+                                اعتبار: {u.rabiaCredit.toLocaleString('en-US')} تومان
+                              </span>
+                            </div>
+                            <div className="text-xs text-[#A8988C]" dir="ltr">
+                              {u.phone}
+                            </div>
+                            {u.address && (
+                              <div className="text-[11px] text-[#B8A698] truncate">
+                                آدرس: {u.address}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Customer Actions: Reset Password */}
+                          <div className="pt-2 border-t border-[#C87D55]/10 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPasswordResetUser(u);
+                                setCustomPasswordInput('1234');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-[#241E1B] hover:bg-[#2F2622] border border-[#C87D55]/30 hover:border-[#C87D55] text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                              title="بازنشانی رمز عبور کاربر به رمز پیش‌فرض"
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                              <span>بازنشانی رمز عبور</span>
+                            </button>
+
+                            <span className="text-[10px] text-[#8C7A6E]">
+                              شناسه: {u.id.slice(0, 6)}...
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1429,11 +1551,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
                       </div>
                     </div>
 
-                    <div className="text-right sm:text-left bg-[#2A221E] px-4 py-2 rounded-xl border border-[#C87D55]/30">
-                      <span className="text-xs text-[#A8988C] block">موجودی فعلی اعتبار رابیا:</span>
-                      <span className="text-xl font-black text-[#E0946B]">
-                        {selectedUser.rabiaCredit.toLocaleString('en-US')} تومان
-                      </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPasswordResetUser(selectedUser);
+                          setCustomPasswordInput('1234');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-[#2A221E] hover:bg-[#342A25] border border-[#C87D55]/30 hover:border-[#C87D55] text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                        title="بازنشانی رمز عبور این مشتری"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                        <span>بازنشانی رمز</span>
+                      </button>
+
+                      <div className="text-right sm:text-left bg-[#2A221E] px-4 py-2 rounded-xl border border-[#C87D55]/30">
+                        <span className="text-xs text-[#A8988C] block">موجودی فعلی اعتبار رابیا:</span>
+                        <span className="text-xl font-black text-[#E0946B]">
+                          {selectedUser.rabiaCredit.toLocaleString('en-US')} تومان
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -2921,6 +3058,97 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onMenuU
               <button
                 type="button"
                 onClick={() => setOrderToPrepare(null)}
+                className="py-2.5 px-4 rounded-xl bg-[#251D19] hover:bg-[#2F2420] text-[#D8C7B8] text-xs font-bold transition-all border border-[#C87D55]/20 cursor-pointer"
+              >
+                انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Modal */}
+      {passwordResetUser && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl bg-[#1C1613] border border-amber-500/40 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200 text-right">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#C87D55]/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#FDFBF7]">بازنشانی رمز عبور مشتری</h3>
+                  <p className="text-xs text-[#A8988C]">
+                    {passwordResetUser.name} ({passwordResetUser.phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPasswordResetUser(null)}
+                className="p-1.5 rounded-xl hover:bg-[#251D19] text-[#A8988C] hover:text-[#FDFBF7] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-800/30 text-xs text-amber-200/90 leading-relaxed">
+              با تایید این فرم، رمز عبور جدید روی حساب مشتری اعمال خواهد شد و وی می‌تواند با این رمز و شماره موبایل خود وارد سیستم شود. پس از ورود، مشتری قادر است از بخش پروفایل رمز خود را تغییر دهد.
+            </div>
+
+            {/* Password input / presets */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-[#D8C7B8] block">
+                تعیین رمز عبور جدید:
+              </label>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={customPasswordInput}
+                  onChange={(e) => setCustomPasswordInput(e.target.value)}
+                  placeholder="مثلاً 1234"
+                  className="w-full bg-[#251D19] border border-[#C87D55]/40 focus:border-amber-400 rounded-xl px-3 py-2.5 text-sm text-[#FDFBF7] focus:outline-none font-mono tracking-wider text-center"
+                />
+              </div>
+
+              {/* Fast Presets */}
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <span className="text-[11px] text-[#A8988C]">پیشنهاد سریع:</span>
+                <button
+                  type="button"
+                  onClick={() => setCustomPasswordInput('1234')}
+                  className="px-2.5 py-1 rounded-lg bg-[#251D19] hover:bg-[#342823] border border-[#C87D55]/20 text-[11px] text-[#E0946B] font-mono"
+                >
+                  1234
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomPasswordInput(passwordResetUser.phone.slice(-4) || '1234')}
+                  className="px-2.5 py-1 rounded-lg bg-[#251D19] hover:bg-[#342823] border border-[#C87D55]/20 text-[11px] text-[#E0946B] font-mono"
+                >
+                  ۴ رقم آخر شماره ({passwordResetUser.phone.slice(-4)})
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleResetPassword(passwordResetUser.id, customPasswordInput)}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-black shadow-lg shadow-amber-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Check className="w-4 h-4" />
+                <span>ثبت و تنظیم رمز ({customPasswordInput})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPasswordResetUser(null)}
                 className="py-2.5 px-4 rounded-xl bg-[#251D19] hover:bg-[#2F2420] text-[#D8C7B8] text-xs font-bold transition-all border border-[#C87D55]/20 cursor-pointer"
               >
                 انصراف

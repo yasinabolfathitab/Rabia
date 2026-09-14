@@ -753,6 +753,7 @@ export function updateUserProfile(userId: string, updates: Partial<User>): User 
   if (!user) return null;
 
   Object.assign(user, updates);
+  signAndProtectUser(user);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
   emitRealtimeEvent('user_updated', user);
 
@@ -839,6 +840,38 @@ export function findUserByPhone(phone: string): User | null {
   const users = getUsers();
   const clean = phone.trim().replace(/^(\+98|0098)/, '0');
   return users.find((u) => u.phone.includes(clean) || clean.includes(u.phone)) || null;
+}
+
+export function resetUserPassword(userId: string, newPassword: string = '1234'): { success: boolean; message: string; defaultPassword?: string } {
+  const users = getUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    return { success: false, message: 'کاربر مورد نظر یافت نشد.' };
+  }
+
+  user.password = newPassword;
+  signAndProtectUser(user);
+
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('users')
+      .update({ password: newPassword })
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (error) console.error('Supabase password reset error:', error);
+      });
+  }
+
+  emitRealtimeEvent('user_updated', user);
+
+  return {
+    success: true,
+    message: `رمز عبور کاربر ${user.name} با موفقیت به ${newPassword} بازنشانی شد.`,
+    defaultPassword: newPassword,
+  };
 }
 
 // ---------------- RABIA CREDIT SYSTEM ----------------
